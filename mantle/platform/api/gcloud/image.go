@@ -154,3 +154,21 @@ func (a *API) DeleteImage(name string) (*Pending, error) {
 	opReq := a.compute.GlobalOperations.Get(a.options.Project, op.Name)
 	return a.NewPending(op.Name, opReq), nil
 }
+
+func (a *API) UpdateImage(spec *ImageSpec) (*Pending, error) {
+
+    // Only the following fields can be modified:
+    //      family, description, deprecation status
+	image := &compute.Image{
+		Family:          spec.Family,
+		Description:     spec.Description,
+	}
+
+	req := a.compute.Images.Patch(a.options.Project, spec.Name, image)
+	op, err := req.Do()
+	if err != nil {
+		return nil, fmt.Errorf("Updating %s failed: %v", spec.Name, err)
+	}
+	opReq := a.compute.GlobalOperations.Get(a.options.Project, op.Name)
+	return a.NewPending(op.Name, opReq), nil
+}
