@@ -45,6 +45,7 @@ var (
 	uploadImageFamily      string
 	uploadImageDescription string
 	uploadCreateImage      bool
+	uploadImageLicense     string
 )
 
 func init() {
@@ -59,6 +60,7 @@ func init() {
 	cmdUpload.Flags().StringVar(&uploadImageFamily, "family", "", "GCP image family to attach image to")
 	cmdUpload.Flags().StringVar(&uploadImageDescription, "description", "", "The description that should be attached to the image")
 	cmdUpload.Flags().BoolVar(&uploadCreateImage, "create-image", true, "Create an image in GCP after uploading")
+	cmdUpload.Flags().StringVar(&uploadImageLicense, "license", "", "The license to attach to the image")
 	GCloud.AddCommand(cmdUpload)
 }
 
@@ -162,12 +164,16 @@ func runUpload(cmd *cobra.Command, args []string) {
 			}
 		}
 
-		_, pending, err := api.CreateImage(&gcloud.ImageSpec{
+		spec := &gcloud.ImageSpec{
 			Name:        imageNameGCE,
 			Family:      uploadImageFamily,
 			SourceImage: imageStorageURL,
 			Description: uploadImageDescription,
-		}, uploadForce)
+		}
+		if uploadImageLicense != "" {
+			spec.Licenses = []string{uploadImageLicense}
+		}
+		_, pending, err := api.CreateImage(spec, uploadForce)
 		if err == nil {
 			err = pending.Wait()
 		}

@@ -67,6 +67,8 @@ def gcp_run_ore(build, args):
         ore_upload_cmd.extend(['--description', args.description])
     if not args.create_image:
         ore_upload_cmd.extend(['--create-image=false'])
+    if args.license:
+        ore_upload_cmd.extend(['--license', args.license])
     run_verbose(ore_upload_cmd)
 
     # Run deprecate image to deprecate if requested
@@ -143,4 +145,7 @@ def gcp_cli(parser):
                         action="store_true",
                         default=False,
                         help="If the image should be marked as deprecated")
+    parser.add_argument("--license",
+                        help="The license that should be attached to the image",
+                        default=None)
     return parser
