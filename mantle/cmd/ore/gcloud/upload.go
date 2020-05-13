@@ -22,6 +22,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/net/context"
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/storage/v1"
 
@@ -127,11 +128,40 @@ func runUpload(cmd *cobra.Command, args []string) {
 	}
 
 	imageStorageURL := fmt.Sprintf("https://storage.googleapis.com/%v/%v", uploadBucket, imageNameGS)
+	if uploadWriteUrl != "" {
+		err = ioutil.WriteFile(uploadWriteUrl, []byte(imageStorageURL), 0644)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Writing file (%v) failed: %v\n", uploadWriteUrl, err)
+			os.Exit(1)
+		}
+	}
 
 	if uploadCreateImage {
 		fmt.Printf("Creating image in GCE: %v...\n", imageNameGCE)
 
-		// create image on gce
+		images, err := api.ListImages(context.Background(), imageNameGCE)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error listing images in GCE: %v\n", err)
+			os.Exit(1)
+		}
+
+		if len(images) != 0 && !uploadForce {
+			fmt.Printf("Image %v already exists on GCE. Overwrite? (y/n):", imageNameGCE)
+			var ans string
+			if _, err = fmt.Scan(&ans); err != nil {
+				fmt.Fprintf(os.Stderr, "Scanning overwrite input: %v", err)
+				os.Exit(1)
+			}
+			switch ans {
+			case "y", "Y", "yes":
+				fmt.Println("Overriding existing image...")
+				uploadForce = true
+			default:
+				fmt.Println("Skipped GCE image creation")
+				os.Exit(0)
+			}
+		}
+
 		_, pending, err := api.CreateImage(&gcloud.ImageSpec{
 			Name:        imageNameGCE,
 			Family:      uploadImageFamily,
@@ -141,46 +171,12 @@ func runUpload(cmd *cobra.Command, args []string) {
 		if err == nil {
 			err = pending.Wait()
 		}
-
-		// if image already exists ask to delete and try again
-		if err != nil && strings.HasSuffix(err.Error(), "alreadyExists") {
-			var ans string
-			fmt.Printf("Image %v already exists on GCE. Overwrite? (y/n):", imageNameGCE)
-			if _, err = fmt.Scan(&ans); err != nil {
-				fmt.Fprintf(os.Stderr, "Scanning overwrite input: %v", err)
-				os.Exit(1)
-			}
-			switch ans {
-			case "y", "Y", "yes":
-				fmt.Println("Overriding existing image...")
-				_, pending, err = api.CreateImage(&gcloud.ImageSpec{
-					Name:        imageNameGCE,
-					Family:      uploadImageFamily,
-					SourceImage: imageStorageURL,
-					Description: uploadImageDescription,
-				}, true)
-				if err == nil {
-					err = pending.Wait()
-				}
-				if err != nil {
-					fmt.Fprintf(os.Stderr, "Creating GCE image failed: %v\n", err)
-					os.Exit(1)
-				}
-				fmt.Printf("Image %v sucessfully created in GCE\n", imageNameGCE)
-			default:
-				fmt.Println("Skipped GCE image creation")
-			}
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Creating GCE image failed: %v\n", err)
+			os.Exit(1)
 		}
 	}
 
-	if uploadWriteUrl != "" {
-		err = ioutil.WriteFile(uploadWriteUrl, []byte(imageStorageURL), 0644)
-	}
-
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Creating GCE image failed: %v\n", err)
-		os.Exit(1)
-	}
 }
 
 // Converts an image name from Google Storage to an equivalent GCE image
