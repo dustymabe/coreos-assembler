@@ -155,19 +155,47 @@ func (a *API) DeleteImage(name string) (*Pending, error) {
 	return a.NewPending(op.Name, opReq), nil
 }
 
-func (a *API) UpdateImage(spec *ImageSpec) (*Pending, error) {
+func (a *API) UpdateImage(name string, family string, description string, state string, replacement string) (*Pending, error) {
+
+
+    // Make sure a deprecation state was provided if a replacement
+    // was provided.
+    if replacement != "" && state == "" {
+		return nil, fmt.Errorf("Must provide deprecation state if providing replacement")
+    }
 
     // Only the following fields can be modified:
     //      family, description, deprecation status
 	image := &compute.Image{
-		Family:          spec.Family,
-		Description:     spec.Description,
+		Family:      family,
+		Description: description,
 	}
 
-	req := a.compute.Images.Patch(a.options.Project, spec.Name, image)
+    // Add in deprecation status if provided
+    if state != "" {
+        // Check that the deprecation state is a valid one
+        switch DeprecationState(state) {
+        case DeprecationStateActive,
+            DeprecationStateDeprecated,
+            DeprecationStateObsolete,
+            DeprecationStateDeleted:
+            // Do nothing, state is valid
+        default:
+            return nil, fmt.Errorf("Specified deprecation state is invalid: %s\n", state)
+        }
+        print("here")
+        image.Deprecated = &compute.DeprecationStatus{
+            State:       state,
+            Replacement: replacement,
+        }
+    }
+    fmt.Printf("\n%+v\n", image.Deprecated)
+    fmt.Printf("\n%+v\n", image)
+
+	req := a.compute.Images.Patch(a.options.Project, name, image)
 	op, err := req.Do()
 	if err != nil {
-		return nil, fmt.Errorf("Updating %s failed: %v", spec.Name, err)
+		return nil, fmt.Errorf("Updating %s failed: %v", name, err)
 	}
 	opReq := a.compute.GlobalOperations.Get(a.options.Project, op.Name)
 	return a.NewPending(op.Name, opReq), nil

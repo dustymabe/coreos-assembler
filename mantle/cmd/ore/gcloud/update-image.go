@@ -15,34 +15,45 @@
 package gcloud
 
 import (
-	"github.com/spf13/cobra"
+	"fmt"
 
 	"github.com/coreos/mantle/platform/api/gcloud"
+	"github.com/spf13/cobra"
 )
 
 var (
-	cmdUpdate = &cobra.Command{
-		Use:   "update-image --image=ImageName [--family=ImageFamily] [--description=ImageDescription]",
+	cmdUpdateImage = &cobra.Command{
+		Use:   "update-image",
 		Short: "Update os image",
 		Long:  "Update os image attributes in GCP.",
 		Run:   runUpdateImage,
 	}
 
-	updateImageName        string
-	updateImageFamily      string
 	updateImageDescription string
+	updateImageFamily      string
+	updateImageName        string
+	updateImageReplacement string
+	updateImageState       string
 )
 
 func init() {
-	cmdUpdate.Flags().StringVar(
+	cmdUpdateImage.Flags().StringVar(
 		&updateImageName, "image", "", "GCP image name")
-	cmdUpdate.Flags().StringVar(
+	cmdUpdateImage.Flags().StringVar(
 		&updateImageFamily, "family", "",
 		"Updated GCP image family to attach image to")
-	cmdUpdate.Flags().StringVar(
+	cmdUpdateImage.Flags().StringVar(
 		&updateImageDescription, "description", "",
 		"The updated description for the image")
-	GCloud.AddCommand(cmdUpdate)
+	cmdUpdateImage.Flags().StringVar(&updateImageState, "state", "",
+		fmt.Sprintf("Deprecation state must be one of: %s,%s,%s,%s",
+			gcloud.DeprecationStateActive,
+			gcloud.DeprecationStateDeprecated,
+			gcloud.DeprecationStateObsolete,
+			gcloud.DeprecationStateDeleted))
+	cmdUpdateImage.Flags().StringVar(&updateImageReplacement,
+		"replacement", "", "optional: link to replacement for the deprecated image")
+	GCloud.AddCommand(cmdUpdateImage)
 }
 
 func runUpdateImage(cmd *cobra.Command, args []string) {
@@ -51,19 +62,22 @@ func runUpdateImage(cmd *cobra.Command, args []string) {
 		plog.Fatal("Must provide an image name via --image")
 	}
 	// Check that the user provided at least one thing to change
-	if updateImageFamily == "" && updateImageDescription == "" {
-		plog.Fatal("Must provide one of --family or --description")
+	if updateImageFamily == "" && updateImageDescription == "" && updateImageState == "" {
+		plog.Fatal("Must provide one of --family/--description/--state")
 	}
 
-	// Create the ImageSpec. Don't worry about passing "" for
-	// family or description. If "" is passed no update will happen.
-	spec := &gcloud.ImageSpec{
-		Name:        updateImageName,
-		Family:      updateImageFamily,
-		Description: updateImageDescription,
-	}
-
-	_, err := api.UpdateImage(spec)
+    // Make call to UpdateImage. Don't worry about passing ""
+    // If "" is passed no update will happen.
+	pending, err := api.UpdateImage(
+        updateImageName,
+        updateImageFamily,
+        updateImageDescription,
+        updateImageState,
+        updateImageReplacement,
+    )
+    if err == nil {
+        err = pending.Wait()
+    }
 	if err != nil {
 		plog.Fatalf("Updating image failed: %v\n", err)
 	}

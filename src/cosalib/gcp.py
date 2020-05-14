@@ -57,7 +57,7 @@ def gcp_run_ore(build, args):
     ore_upload_cmd = ore_common_args + [
         'upload',
         '--basename', build.build_name,
-        '--force',  # We want to support restarting the pipeline
+#       '--force',  # We want to support restarting the pipeline
         '--bucket', f'{args.bucket}',
         '--name', gcp_name,
         '--file', f"{build.image_path}",
@@ -69,31 +69,29 @@ def gcp_run_ore(build, args):
         ore_upload_cmd.extend(['--create-image=false'])
     if args.license:
         ore_upload_cmd.extend(['--license', args.license])
-    run_verbose(ore_upload_cmd)
+#   run_verbose(ore_upload_cmd)
 
-    # Run deprecate image to deprecate if requested
-    if args.deprecated:
-        ore_deprecate_cmd = ore_common_args + [
-            'deprecate-image',
-            '--image', gcp_name,
-            '--state', 'DEPRECATED'
-        ]
-        run_verbose(ore_deprecate_cmd)
-
-    # Run update-image to add to an image family if requested.
-    # We run this as a separate API call because we want to run
-    # it AFTER the deprecation if the user passed --deprecated
-    if args.family:
+    # Run update-image to add to an image family or set as
+    # deprecated if requested. We run this as a separate API call
+    # because in some cases we want to add images to an image family
+    # and set them as deprecated at the same time so the new image
+    # won't be given out until we run the release pipeline and 
+    # officially release that version.
+    if args.deprecated or args.family:
         ore_update_cmd = ore_common_args + [
             'update-image',
             '--image', gcp_name,
-            '--family', args.family
         ]
+        if args.deprecated:
+            ore_update_cmd.extend(['--state', 'DEPRECATED',
+                    '--replacement', 'foo'])
+        if args.family:
+            ore_update_cmd.extend(['--family', args.family])
         run_verbose(ore_update_cmd)
 
     build.meta['gcp'] = {
         'image': gcp_name,
-        'url': open(urltmp).read().strip()
+        'url': 'https://foo.com'
     }
     build.meta_write()
 
