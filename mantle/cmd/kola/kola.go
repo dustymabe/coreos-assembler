@@ -250,6 +250,7 @@ func writeProps() error {
 	}
 	type GCE struct {
 		Image       string `json:"image"`
+		Project     string `json:"project"`
 		MachineType string `json:"type"`
 	}
 	type OpenStack struct {
@@ -316,6 +317,7 @@ func writeProps() error {
 		},
 		GCE: GCE{
 			Image:       kola.GCEOptions.Image,
+			Project:     kola.GCEOptions.Project,
 			MachineType: kola.GCEOptions.MachineType,
 		},
 		OpenStack: OpenStack{
@@ -577,7 +579,8 @@ func syncFindParentImageOptions() error {
 			return err
 		}
 	case "gce":
-		kola.GCEOptions.Image, err = parentCosaBuild.FindGCPImage()
+		kola.GCEOptions.Image, kola.GCEOptions.Project, err =
+			parentCosaBuild.FindGCPImage()
 		if err != nil {
 			return err
 		}
