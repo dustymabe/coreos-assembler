@@ -74,6 +74,13 @@ func (build *Build) FindAMI(region string) (string, error) {
 	return "", fmt.Errorf("no AMI found for region %s", region)
 }
 
+func (build *Build) FindGCPImage() (string, error) {
+	if build.Gcp != nil {
+		return build.Gcp.Image, nil
+	}
+	return "", errors.New("no GCP image found")
+}
+
 func (build *Build) WriteMeta(path string, validate bool) error {
 	if validate {
 		if err := build.Validate(); len(err) != 0 {
