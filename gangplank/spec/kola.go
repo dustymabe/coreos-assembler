@@ -49,7 +49,7 @@ var kolaTestDefinitions = kolaTests{
 	// Metal and live-ISO tests
 	"iso": {
 		ID:               "Kola ISO Testing",
-		PostCommands:     []string{"kola testiso -S"},
+		PostCommands:     []string{"kola testiso -S --scenarios iso-offline-install"},
 		ExecutionOrder:   4,
 		RequireArtifacts: []string{"live-iso"},
 	},
