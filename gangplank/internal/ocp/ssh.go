@@ -145,17 +145,28 @@ func (m *minioServer) startMinioAndForwardOverSSH(ctx context.Context, termCh te
 	// dynamically chosen based on port availabilty on the remote. If
 	// we don't do this then multiple concurrent gangplank runs will fail
 	// because they'll try to use the same port.
-	remoteConn, err := client.Listen("tcp4", "127.0.0.1:")
-	if err != nil {
-		err = fmt.Errorf("%w: failed to open remote port over ssh for proxy", err)
-		return err
+	var remoteConn net.Listener
+	var remoteSSHport int
+	for {
+		remoteConn, err = client.Listen("tcp4", "127.0.0.1:")
+		if err != nil {
+			err = fmt.Errorf("%w: failed to open remote port over ssh for proxy", err)
+			return err
+		}
+		remoteSSHport, err := strconv.Atoi(strings.Split(remoteConn.Addr().String(), ":")[1])
+		if err != nil {
+			err = fmt.Errorf("%w: failed to parse remote ssh port from connection", err)
+			return err
+		}
+		log.Infof("The SSH forwarding chose port %d on the remote host", remoteSSHport)
+
+		if getPortOrNext(remoteSSHport) == remoteSSHport {
+			break
+		}
+
+		log.Infof("Local Port %d is not available, selecting another port", remoteSSHport)
+		remoteConn.Close()
 	}
-	remoteSSHport, err := strconv.Atoi(strings.Split(remoteConn.Addr().String(), ":")[1])
-	if err != nil {
-		err = fmt.Errorf("%w: failed to parse remote ssh port from connection", err)
-		return err
-	}
-	log.Infof("The SSH forwarding chose port %v on the remote host", remoteSSHport)
 	// Update m.Port in the minioServer definition so the miniocfg
 	// that gets passed to the remote specifies the correct port for
 	// the local connection there.
