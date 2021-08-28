@@ -1,0 +1,19 @@
+# Instead of doing a slow, whole-cloth build for developer
+# tests, you can quickly test changes via this file. This
+# especially useful for changes to dependencies or for final
+# verification of COSA code.
+#
+# This moves the build time from ~15 minutes to ~3-5 minutes.
+# Example: buildah bud -f Dockerfile.dev -t localhost/cosa-test .
+
+FROM localhost/coreos-assembler-dev:latest
+USER root
+COPY ./ /root/containerbuild/
+WORKDIR /root/containerbuild
+RUN ./build.sh make_and_makeinstall
+
+WORKDIR /srv/
+
+# run as `builder` user
+USER builder
+ENTRYPOINT ["/usr/bin/dumb-init", "/usr/bin/coreos-assembler"]

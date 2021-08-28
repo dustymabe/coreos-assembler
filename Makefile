@@ -13,7 +13,7 @@ PYIGNORE ?= E128,E241,E402,E501,E722,W503,W504
 
 MANTLE_BINARIES := ore kola plume
 
-all: tools mantle gangplank
+all: gangplank
 
 src:=$(shell find src -maxdepth 1 -type f -executable -print)
 pysources=$(shell find src -type f -name '*.py') $(shell for x in $(src); do if head -1 $$x | grep -q python; then echo $$x; fi; done)
@@ -94,6 +94,4 @@ install:
 	ln -sf ../lib/coreos-assembler/cp-reflink $(DESTDIR)$(PREFIX)/bin/
 	ln -sf coreos-assembler $(DESTDIR)$(PREFIX)/bin/cosa
 	install -d $(DESTDIR)$(PREFIX)/lib/coreos-assembler/tests/kola
-	cd tools && $(MAKE) install DESTDIR=$(DESTDIR)
-	cd mantle && $(MAKE) install DESTDIR=$(DESTDIR)
 	cd gangplank && $(MAKE) install DESTDIR=$(DESTDIR)
