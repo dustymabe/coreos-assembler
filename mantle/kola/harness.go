@@ -587,10 +587,13 @@ func runProvidedTests(testsBank map[string]*register.Test, patterns []string, mu
 	}
 
 	if len(nonExclusiveTests) > 0 {
-		// This test does not need to be registered since it is temporarily
-		// created to be used as a wrapper
-		nonExclusiveWrapper := makeNonExclusiveTest(nonExclusiveTests, flight)
-		tests[nonExclusiveWrapper.Name] = &nonExclusiveWrapper
+		buckets := resolveTestConflicts(nonExclusiveTests)
+		for i, bucket := range buckets {
+			// This test does not need to be registered since it is temporarily
+			// created to be used as a wrapper
+			nonExclusiveWrapper := makeNonExclusiveTest(i, bucket, flight)
+			tests[nonExclusiveWrapper.Name] = &nonExclusiveWrapper
+		}
 	}
 
 	if multiply > 1 {
@@ -672,15 +675,18 @@ func runProvidedTests(testsBank map[string]*register.Test, patterns []string, mu
 
 func getRerunnable(tests []*harness.H) []string {
 	var testsToRerun []string
+	expPrefix := regexp.MustCompile(`^nonexclusive-test-bucket-[0-9]/`)
+	exp := regexp.MustCompile(`^nonexclusive-test-bucket-[0-9]/$`)
 	for _, h := range tests {
 		// The current nonexclusive test wrapper would rerun all non-exclusive tests.
 		// Instead, we only want to rerun the one(s) that failed, so we will not consider
 		// the wrapper as "rerunnable".
-		if h.Failed() && h.Name() != "non-exclusive-tests" {
+		match := exp.MatchString(h.Name())
+		if h.Failed() && match {
 			// Failed non-exclusive tests will have a prefix in the name
 			// since they are run as subtests of a wrapper tests, we need to
 			// remove this prefix to match the true name of the test
-			name := strings.TrimPrefix(h.Name(), "non-exclusive-tests/")
+			name := expPrefix.Split(h.Name(), 2)[1]
 			testsToRerun = append(testsToRerun, name)
 		}
 	}
@@ -709,6 +715,7 @@ type externalTestMeta struct {
 	AppendKernelArgs string   `json:"appendKernelArgs,omitempty"`
 	Exclusive        bool     `json:"exclusive"`
 	TimeoutMin       int      `json:"timeoutMin"`
+	Conflicts        []string `json:"conflicts"`
 }
 
 // metadataFromTestBinary extracts JSON-in-comment like:
@@ -878,6 +885,7 @@ ExecStart=%s
 		AdditionalNics:   targetMeta.AdditionalNics,
 		AppendKernelArgs: targetMeta.AppendKernelArgs,
 		NonExclusive:     !targetMeta.Exclusive,
+		Conflicts:        targetMeta.Conflicts,
 
 		Run: func(c cluster.TestCluster) {
 			mach := c.Machines()[0]
@@ -1107,8 +1115,87 @@ func collectLogsExternalTest(h *harness.H, t *register.Test, tcluster cluster.Te
 	}
 }
 
+// Creates conflict mappings, mapping each test name to a set of tests that conflict
+// akin to an adjacency table
+func createConflictMappings(tests []*register.Test) map[string]map[string]bool {
+	conflictMappings := make(map[string]map[string]bool)
+	// Get the conflicts for each test and store them as mappings
+	// each testName maps to a set (or a dictionary) of tests that conflict with that test
+	for _, test := range tests {
+		records := make(map[string]bool)
+		if _, found := conflictMappings[test.Name]; !found {
+			conflictMappings[test.Name] = records
+		}
+		for _, testConflict := range test.Conflicts {
+			records[testConflict] = true
+			// If the conflicting test does not also have an entry in the mappings, create one
+			if _, found := conflictMappings[testConflict]; !found {
+				conflictMappings[testConflict] = map[string]bool{test.Name: true}
+			}
+		}
+	}
+
+	// Ensure that the mappings are wellformed, i.e
+	// if test1 indicates test2 is a conflicting test, test2 also has done the same
+	for testName, records := range conflictMappings {
+		for conflictTest := range records {
+			if conflictRecords, found := conflictMappings[conflictTest]; found {
+				if _, found = conflictRecords[testName]; !found {
+					conflictRecords[testName] = true
+				}
+
+			} else {
+				// conflictTest has not indicated any conflicts
+				plog.Warningf("An entry for test %s was not found in conflictMappings", conflictTest)
+			}
+		}
+	}
+
+	return conflictMappings
+}
+
+func resolveTestConflicts(tests []*register.Test) [][]*register.Test {
+	// General idea:
+	//   - assign tests to the first available test bucket
+	//   - if a test bucket has a conflicting test, that bucket is unavailable
+	//   - if no buckets are available, create a new one
+	// [Greedy graph coloring] guarantees VMs used <= 1 + maximum number of conflicts one test has
+	assignments := make(map[string]int)
+	assignments[tests[0].Name] = 0
+	var buckets [][]*register.Test
+	buckets = append(buckets, []*register.Test{tests[0]})
+	conflictMappings := createConflictMappings(tests)
+
+	for _, test := range tests[1:] {
+		// Find which of the test buckets are in use by conflicting tests
+		bucketInConflict := make(map[int]bool)
+		for conflictingTest := range conflictMappings[test.Name] {
+			// Set the bucket being used by conflictingTest to unavailable
+			if bucket, found := assignments[conflictingTest]; found {
+				bucketInConflict[bucket] = true
+			}
+		}
+		// Find a test bucket that is not being used by a conflicting test
+		i := 0
+		for ; i < len(buckets); i++ {
+			if _, inConflict := bucketInConflict[i]; !inConflict {
+				assignments[test.Name] = i
+				buckets[i] = append(buckets[i], test)
+				break
+			}
+		}
+		// Add a new bucket for this test, since all existing ones are being used
+		// by conflicting tests
+		if i == len(buckets) {
+			buckets = append(buckets, []*register.Test{test})
+		}
+
+	}
+	return buckets
+}
+
 // Create a parent test that runs non-exclusive tests as subtests
-func makeNonExclusiveTest(tests []*register.Test, flight platform.Flight) register.Test {
+func makeNonExclusiveTest(bucket int, tests []*register.Test, flight platform.Flight) register.Test {
 	// Parse test flags and gather configs
 	var (
 		internetAccess     bool
@@ -1154,7 +1241,7 @@ func makeNonExclusiveTest(tests []*register.Test, flight platform.Flight) regist
 	}
 
 	nonExclusiveWrapper := register.Test{
-		Name: "non-exclusive-tests",
+		Name: fmt.Sprintf("non-exclusive-test-bucket-%v", bucket),
 		Run: func(tcluster cluster.TestCluster) {
 			for _, t := range tests {
 				t := t
