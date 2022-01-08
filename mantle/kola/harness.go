@@ -587,7 +587,7 @@ func runProvidedTests(testsBank map[string]*register.Test, patterns []string, mu
 	}
 
 	if len(nonExclusiveTests) > 0 {
-		buckets := resolveTestConflicts(nonExclusiveTests)
+		buckets := createTestBuckets(nonExclusiveTests)
 		numBuckets := len(buckets)
 		for i := 0; i < numBuckets; {
 			// This test does not need to be registered since it is temporarily
@@ -1134,82 +1134,60 @@ func collectLogsExternalTest(h *harness.H, t *register.Test, tcluster cluster.Te
 	}
 }
 
-// Creates conflict mappings, mapping each test name to a set of tests that conflict
-// akin to an adjacency table
-func createConflictMappings(tests []*register.Test) map[string]map[string]bool {
-	conflictMappings := make(map[string]map[string]bool)
-	// Get the conflicts for each test and store them as mappings
-	// each testName maps to a set (or a dictionary) of tests that conflict with that test
+func createTestBuckets(tests []*register.Test) [][]*register.Test {
+
+	// Make an array of maps. Each entry in the array represents a
+	// test bucket. Each corresponding map is the test.Name -> *register.Test
+	// mapping for tests to be executed
+	var bucketInfo []map[string]*register.Test
+
+	// Get a Map of test.Name -> *register.Test
+	testMap := make(map[string]*register.Test)
 	for _, test := range tests {
-		records := make(map[string]bool)
-		if _, found := conflictMappings[test.Name]; !found {
-			conflictMappings[test.Name] = records
-		}
-		for _, testConflict := range test.Conflicts {
-			records[testConflict] = true
-			// If the conflicting test does not also have an entry in the mappings, create one
-			if _, found := conflictMappings[testConflict]; !found {
-				conflictMappings[testConflict] = map[string]bool{test.Name: true}
-			}
+		testMap[test.Name] = test
+	}
+
+	// Update all test's conflict lists to be complete
+	for _, test := range tests {
+		for _, conflict := range test.Conflicts {
+			testMap[conflict].Conflicts = append(testMap[conflict].Conflicts, test.Name)
 		}
 	}
 
-	// Ensure that the mappings are wellformed, i.e
-	// if test1 indicates test2 is a conflicting test, test2 also has done the same
-	for testName, records := range conflictMappings {
-		for conflictTest := range records {
-			if conflictRecords, found := conflictMappings[conflictTest]; found {
-				if _, found = conflictRecords[testName]; !found {
-					conflictRecords[testName] = true
-				}
-
-			} else {
-				// conflictTest has not indicated any conflicts
-				plog.Warningf("An entry for test %s was not found in conflictMappings", conflictTest)
-			}
-		}
-	}
-
-	return conflictMappings
-}
-
-func resolveTestConflicts(tests []*register.Test) [][]*register.Test {
-	// General idea:
-	//   - assign tests to the first available test bucket
-	//   - if a test bucket has a conflicting test, that bucket is unavailable
-	//   - if no buckets are available, create a new one
-	// [Greedy graph coloring] guarantees VMs used <= 1 + maximum number of conflicts one test has
-	assignments := make(map[string]int)
-	assignments[tests[0].Name] = 0
-	var buckets [][]*register.Test
-	buckets = append(buckets, []*register.Test{tests[0]})
-	conflictMappings := createConflictMappings(tests)
-
+	// Distribute into buckets. Start by creating a bucket with the
+	// first test in it and then going from there.
+	bucketInfo = append(bucketInfo, map[string]*register.Test{tests[0].Name: tests[0]})
+mainloop:
 	for _, test := range tests[1:] {
-		// Find which of the test buckets are in use by conflicting tests
-		bucketInConflict := make(map[int]bool)
-		for conflictingTest := range conflictMappings[test.Name] {
-			// Set the bucket being used by conflictingTest to unavailable
-			if bucket, found := assignments[conflictingTest]; found {
-				bucketInConflict[bucket] = true
+		for _, bucket := range bucketInfo {
+			foundConflict := false
+			for _, conflict := range test.Conflicts {
+				if _, found := bucket[conflict]; found {
+					foundConflict = true
+				}
+			}
+			if !foundConflict {
+				// No Conflict here. Assign the test and continue.
+				bucket[test.Name] = test
+				continue mainloop
 			}
 		}
-		// Find a test bucket that is not being used by a conflicting test
-		i := 0
-		for ; i < len(buckets); i++ {
-			if _, inConflict := bucketInConflict[i]; !inConflict {
-				assignments[test.Name] = i
-				buckets[i] = append(buckets[i], test)
-				break
-			}
-		}
-		// Add a new bucket for this test, since all existing ones are being used
-		// by conflicting tests
-		if i == len(buckets) {
-			buckets = append(buckets, []*register.Test{test})
-		}
-
+		// No eligible buckets found for test. Create a new bucket.
+		bucketInfo = append(bucketInfo, map[string]*register.Test{test.Name: test})
 	}
+
+	// Convert the bucketInfo array of maps into an two dimensional
+	// array of register.Test objects. This is the format the caller
+	// is expecting the data in.
+	var buckets [][]*register.Test
+	for _, bucket := range bucketInfo {
+		var bucketTests []*register.Test
+		for _, test := range bucket {
+			bucketTests = append(bucketTests, test)
+		}
+		buckets = append(buckets, bucketTests)
+	}
+
 	return buckets
 }
 
