@@ -29,16 +29,17 @@ import (
 	"github.com/kballard/go-shellquote"
 	"github.com/pkg/errors"
 	"golang.org/x/crypto/ssh"
-	"golang.org/x/net/context"
+    "golang.org/x/net/context"
 
-	"github.com/coreos/mantle/platform/conf"
-	"github.com/coreos/mantle/util"
+    "github.com/coreos/mantle/platform/conf"
+    "github.com/coreos/mantle/util"
 )
 
 const (
 	// Encryption takes a long time--retry more before failing
 	sshRetries = 60
 	sshTimeout = 10 * time.Second
+    //foo
 )
 
 var (

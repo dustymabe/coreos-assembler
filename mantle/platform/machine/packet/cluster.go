@@ -102,7 +102,7 @@ func (pc *cluster) NewMachine(userdata *conf.UserData) (platform.Machine, error)
 		return nil, err
 	}
 
-	if err := platform.StartMachine(mach, mach.journal); err != nil {
+	if err := platform.StartMachine(mach, mach.journal, false); err != nil {
 		mach.Destroy()
 		return nil, err
 	}

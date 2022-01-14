@@ -81,7 +81,7 @@ ExecStart=/usr/bin/bash -c 'echo "COREOS_ESX_IPV4_PRIVATE_0=$(ip addr show ens19
 		return nil, err
 	}
 
-	if err := platform.StartMachine(mach, mach.journal); err != nil {
+	if err := platform.StartMachine(mach, mach.journal, false); err != nil {
 		mach.Destroy()
 		return nil, err
 	}

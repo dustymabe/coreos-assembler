@@ -81,7 +81,7 @@ func (gc *cluster) NewMachine(userdata *conf.UserData) (platform.Machine, error)
 		return nil, err
 	}
 
-	if err := platform.StartMachine(gm, gm.journal); err != nil {
+	if err := platform.StartMachine(gm, gm.journal, false); err != nil {
 		gm.Destroy()
 		return nil, err
 	}

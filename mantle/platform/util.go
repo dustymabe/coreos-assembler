@@ -116,7 +116,7 @@ func RebootMachine(m Machine, j *Journal) error {
 	if err := StartReboot(m); err != nil {
 		return fmt.Errorf("machine %q failed to begin rebooting: %v", m.ID(), err)
 	}
-	return StartMachineAfterReboot(m, j, bootId)
+	return StartMachineAfterReboot(m, j, bootId, true)
 }
 
 // WaitForMachineReboot will wait for the machine to reboot, i.e. it is assumed
@@ -171,24 +171,29 @@ func WaitForMachineReboot(m Machine, j *Journal, timeout time.Duration, oldBootI
 		if err != nil {
 			return err
 		}
-		return StartMachineAfterReboot(m, j, oldBootId)
+		return StartMachineAfterReboot(m, j, oldBootId, true)
 	case <-time.After(timeout):
 		return fmt.Errorf("timed out after %v waiting for machine to reboot", timeout)
 	}
 }
 
-func StartMachineAfterReboot(m Machine, j *Journal, oldBootId string) error {
+func StartMachineAfterReboot(m Machine, j *Journal, oldBootId string, withCheck bool) error {
+    plog.Debug("j.start")
 	if err := j.Start(context.TODO(), m, oldBootId); err != nil {
 		return fmt.Errorf("machine %q failed to start: %v", m.ID(), err)
 	}
-	if err := CheckMachine(context.TODO(), m); err != nil {
-		return fmt.Errorf("machine %q failed basic checks: %v", m.ID(), err)
-	}
+    if withCheck {
+        plog.Debug("CheckMachine")
+        if err := CheckMachine(context.TODO(), m); err != nil {
+            return fmt.Errorf("machine %q failed basic checks: %v", m.ID(), err)
+        }
+        plog.Debug("End CheckMachine")
+    }
 	return nil
 }
 
 // StartMachine will start a given machine, provided the machine's journal.
-func StartMachine(m Machine, j *Journal) error {
+func StartMachine(m Machine, j *Journal, withCheck bool) error {
 	errchan := make(chan error)
 	go func() {
 		err := m.IgnitionError()
@@ -204,7 +209,7 @@ func StartMachine(m Machine, j *Journal) error {
 	}()
 	go func() {
 		// This one ends up connecting to the journal via ssh
-		errchan <- StartMachineAfterReboot(m, j, "")
+		errchan <- StartMachineAfterReboot(m, j, "", withCheck)
 	}()
 	return <-errchan
 }

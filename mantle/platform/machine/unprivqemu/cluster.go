@@ -185,12 +185,18 @@ func (qc *Cluster) NewMachineWithQemuOptions(userdata *conf.UserData, options pl
 		return nil, err
 	}
 
-	if err := platform.StartMachine(qm, qm.journal); err != nil {
-		qm.Destroy()
-		return nil, err
-	}
+    go func() {
+        fmt.Printf("startmachine goroutine\n")
+        if err := platform.StartMachine(qm, qm.journal, false); err != nil {
+            qm.Destroy()
+            fmt.Printf("Error in StartMachine(): %v", err)
+        }
+        fmt.Printf("end startmachine goroutine\n")
+    }()
 
+    fmt.Printf("addmach\n")
 	qc.AddMach(qm)
+    fmt.Printf("end addmach\n")
 
 	return qm, nil
 }

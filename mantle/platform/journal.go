@@ -22,6 +22,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+//  "time"
 
 	"github.com/coreos/pkg/multierror"
 	"github.com/pkg/errors"
@@ -95,11 +96,15 @@ func (j *Journal) Start(ctx context.Context, m Machine, oldBootId string) error 
 		j.cancel = nil
 		_ = j.recorder.Wait() // Just need to consume the status.
 	}
+    plog.Debug("Start() after initialization")
 	ctx, cancel := context.WithCancel(ctx)
 
 	start := func() error {
+        plog.Debug("in goroutine")
 		if oldBootId != "" {
+            plog.Debug("Finding bootid")
 			bootId, err := GetMachineBootId(m)
+            plog.Debug("Found bootid")
 			if err != nil {
 				return err
 			} else if bootId == oldBootId {
@@ -112,14 +117,18 @@ func (j *Journal) Start(ctx context.Context, m Machine, oldBootId string) error 
 			return err
 		}
 
+        plog.Debug("StartSSH")
 		return j.recorder.StartSSH(ctx, client)
 	}
 
 	// Retry for a while because this should be run before CheckMachine
+    plog.Debug("retry ssh in Start()")
+////if err := util.RetryUntilTimeout(sshTimeout, 10*time.Second, start); err != nil {
 	if err := util.Retry(sshRetries, sshTimeout, start); err != nil {
 		cancel()
 		return errors.Wrapf(err, "ssh journalctl failed")
 	}
+    plog.Debug("end retry ssh in Start()")
 
 	j.cancel = cancel
 	return nil

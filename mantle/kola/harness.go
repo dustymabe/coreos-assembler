@@ -26,6 +26,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+    "context"
 
 	"github.com/coreos/pkg/capnslog"
 	"github.com/kballard/go-shellquote"
@@ -1249,12 +1250,7 @@ func runTest(h *harness.H, t *register.Test, pltfrm string, flight platform.Flig
 			h.Fatalf("Cluster failed starting machines: %v", err)
 		}
 	}
-	// Machines should now be up. Let's start the test execution timer.
-	// Each test is run via RunWithExecTimeoutCheck() in SSH() which
-	// will interrupt this function/goroutine if the timeout expires.
-	// In the case of early return h.StopExecTimer can be called even
-	// if h.StartExecTimer has not been called
-	h.StartExecTimer()
+    
 
 	// pass along all registered native functions
 	var names []string
@@ -1269,6 +1265,33 @@ func runTest(h *harness.H, t *register.Test, pltfrm string, flight platform.Flig
 		NativeFuncs: names,
 		FailFast:    t.FailFast,
 	}
+
+	// Machines should be running. Let's start the test execution timer.
+	// Each test is run via RunWithExecTimeoutCheck() in SSH() which
+	// will interrupt this function/goroutine if the timeout expires.
+	// In the case of early return h.StopExecTimer can be called even
+	// if h.StartExecTimer has not been called
+	h.StartExecTimer()
+
+    // Wait for SSH to come up on the machines before moving on.
+    // Note: SSH won't be available until after Ignition has run.
+    // Note: tcluster.SSH will eventually fail the test if the
+    //       ExecTimer expires.
+    for _, mach := range tcluster.Machines() {
+        // loop until ssh into this one machine succeeds
+        for {
+            plog.Debugf("Trying SSH to Machine SSH %v", mach.ID())
+            if _, err := tcluster.SSH(mach, "/bin/true"); err == nil {
+                // We got an SSH connection. Let's run some sanity checks
+                // and then break so we move to the next machine.
+				if err = platform.CheckMachine(context.TODO(), mach); err != nil {
+					h.Fatal(errors.Wrapf(err, "check machine %v failed.", mach.ID()))
+				}
+                break
+            }
+            time.Sleep(10*time.Second)
+        }
+    }
 
 	// drop kolet binary on machines
 	if t.ExternalTest != "" || t.NativeFuncs != nil {

@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+    "time"
 
 	"github.com/coreos/mantle/platform"
 	"github.com/coreos/mantle/platform/conf"
@@ -101,17 +102,26 @@ func (ac *cluster) NewMachineWithOptions(userdata *conf.UserData, options platfo
 		return nil, err
 	}
 
+    fmt.Printf("journal\n")
 	if mach.journal, err = platform.NewJournal(mach.dir); err != nil {
 		mach.Destroy()
 		return nil, err
 	}
+    fmt.Printf("end journal\n")
 
-	if err := platform.StartMachine(mach, mach.journal); err != nil {
-		mach.Destroy()
-		return nil, err
-	}
+    go func() {
+        fmt.Printf("startmachine goroutine\n")
+        time.Sleep(10*time.Second)
+        if err := platform.StartMachine(mach, mach.journal, false); err != nil {
+            mach.Destroy()
+            fmt.Printf("Error in StartMachine(): %v", err)
+        }
+        fmt.Printf("end startmachine goroutine\n")
+    }()
 
+    fmt.Printf("addmach\n")
 	ac.AddMach(mach)
+    fmt.Printf("end addmach\n")
 
 	return mach, nil
 }

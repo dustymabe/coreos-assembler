@@ -48,29 +48,65 @@ func RetryConditional(attempts int, delay time.Duration, shouldRetry func(err er
 	return err
 }
 
-func WaitUntilReady(timeout, delay time.Duration, checkFunction func() (bool, error)) error {
+func RetryUntilTimeout(timeout, delay time.Duration, f func() error) error {
 	after := time.After(timeout)
 	for {
 		select {
-		case <-after:
+            case <-after:
+			return fmt.Errorf("time limit exceeded")
+		default:
+		}
+		// Log how long it took the function to run. This will help gather information about
+		// how long it takes remote network requests to finish.
+		start := time.Now()
+		plog.Debugf("rRun Function")
+		err := f()
+		plog.Debugf("RetryUntilTimeout: f() took %v", time.Since(start))
+		if err == nil {
+            break
+		}
+		plog.Debugf("%v", err)
+		plog.Debugf("rSleeping")
+		time.Sleep(delay)
+		plog.Debugf("rDone Sleeping")
+
+		plog.Debugf("rEnd Loop")
+	}
+	return nil
+}
+
+func WaitUntilReady(timeout, delay time.Duration, checkFunction func() (bool, error)) error {
+////ctx, _ := context.WithTimeout(context.Background(), timeout)
+	
+	after := time.After(timeout)
+	for {
+		select {
+            case <-after:
+           // case <-ctx.Done():
 			return fmt.Errorf("time limit exceeded")
 		default:
 		}
 
-		time.Sleep(delay)
-
 		// Log how long it took checkFunction to run. This will help gather information about
 		// how long it takes remote API requests (like provisioning machines) to finish.
 		start := time.Now()
+		plog.Debugf("Run Function")
 		done, err := checkFunction()
 		plog.Debugf("WaitUntilReady: checkFunction took %v", time.Since(start))
 		if err != nil {
 			return err
 		}
+		plog.Debugf("Error Check")
 
 		if done {
+            plog.Debugf("Done")
 			break
 		}
+		plog.Debugf("Sleeping")
+		time.Sleep(delay)
+		plog.Debugf("Done Sleeping")
+
+		plog.Debugf("End Loop")
 	}
 	return nil
 }

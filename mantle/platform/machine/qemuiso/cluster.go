@@ -155,7 +155,7 @@ func (qc *Cluster) NewMachineWithQemuOptions(userdata *conf.UserData, options pl
 		return nil, err
 	}
 
-	if err := platform.StartMachine(qm, qm.journal); err != nil {
+	if err := platform.StartMachine(qm, qm.journal, false); err != nil {
 		qm.Destroy()
 		return nil, err
 	}
