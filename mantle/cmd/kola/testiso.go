@@ -718,7 +718,7 @@ func testLiveIso(ctx context.Context, inst platform.Install, outdir string, offl
 func testLiveLogin(ctx context.Context, outdir string) (time.Duration, error) {
 	builddir := kola.CosaBuild.Dir
 	isopath := filepath.Join(builddir, kola.CosaBuild.Meta.BuildArtifacts.LiveIso.Path)
-	builder, err := newBaseQemuBuilder(outdir)
+	builder, _, err := newQemuBuilder(outdir)
 	if err != nil {
 		return 0, err
 	}
