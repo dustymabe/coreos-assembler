@@ -458,7 +458,7 @@ func filterTests(tests map[string]*register.Test, patterns []string, pltfrm stri
 			continue
 		}
 
-		if (!noPattern && !match && !tagMatch) || (!tagMatch && noPattern && len(Tags) > 0) {
+		if (!noPattern && !match && !tagMatch) || (!tagMatch && noPattern && len(positiveTags) > 0) {
 			continue
 		}
 
