@@ -492,16 +492,19 @@ func runTestIso(cmd *cobra.Command, args []string) error {
 			isOffline = false
 		}
 
-		if kola.HasString("pxe", components) {
+		switch components[0] {
+		case "pxe-offline-install", "pxe-online-install":
 			duration, err = testPXE(ctx, inst, filepath.Join(outputDir, test))
-		} else {
-			if kola.HasString("login", components) {
-				duration, err = testLiveLogin(ctx, filepath.Join(outputDir, test))
-			} else if strings.Contains(test, "disk") {
-				duration, err = testAsDisk(ctx, filepath.Join(outputDir, test))
-			} else {
-				duration, err = testLiveIso(ctx, inst, filepath.Join(outputDir, test), false)
-			}
+		case "iso-as-disk":
+			duration, err = testAsDisk(ctx, filepath.Join(outputDir, test))
+		case "iso-live-login":
+			duration, err = testLiveLogin(ctx, filepath.Join(outputDir, test))
+		case "iso-offline-install":
+			duration, err = testLiveIso(ctx, inst, filepath.Join(outputDir, test), false)
+		case "miniso-install":
+			duration, err = testLiveIso(ctx, inst, filepath.Join(outputDir, test), true)
+		default:
+			plog.Fatal("Unknown test name: %s", test)
 		}
 
 		printResult(test, duration, err)
