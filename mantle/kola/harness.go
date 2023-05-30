@@ -137,11 +137,15 @@ var (
 	consoleChecks = []struct {
 		desc     string
 		match    *regexp.Regexp
+        warnOnly bool
+        allowRerunSuccess bool
 		skipFlag *register.Flag
 	}{
 		{
 			desc:     "emergency shell",
 			match:    regexp.MustCompile("Press Enter for emergency shell|Starting Emergency Shell|You are in emergency mode"),
+            warnOnly: false,
+            allowRerunSuccess: false,
 			skipFlag: &[]register.Flag{register.NoEmergencyShellCheck}[0],
 		},
 		{
@@ -155,6 +159,17 @@ var (
 		{
 			desc:  "kernel oops",
 			match: regexp.MustCompile("Oops:"),
+		},
+		{
+            // For this one we see it sometimes when I/O is really slow, which is often 
+            // more of an indication of a problem with resources in our pipeline rather
+            // than a problem with the software we are testing. We'll mark it as warnOnly
+            // so it's non-fatal and also allow for a rerun of a test that goes on to
+            // fail that had this problem to ultimately result in success.
+			desc:  "kernel soft lockup",
+			match: regexp.MustCompile("watchdog: BUG: soft lockup - CPU"),
+            warnOnly: true,
+            allowRerunSuccess: true,
 		},
 		{
 			desc:  "kernel warning",
@@ -811,10 +826,9 @@ func runProvidedTests(testsBank map[string]*register.Test, patterns []string, mu
 }
 
 func allTestsAllowRerunSuccess(testsBank map[string]*register.Test, testsToRerun, rerunSuccessTags []string) bool {
-	// No tags, we can return early
-	if len(rerunSuccessTags) == 0 {
-		return false
-	}
+    // Always consider the special tag of "rerun-sucess" that is added
+    // by the test harness in some failure scenarios.
+	rerunSuccessTags = append(rerunSuccessTags, "rerun-success")
 	// Build up a map of rerunSuccessTags so that we can easily check
 	// if a given tag is in the map.
 	rerunSuccessTagMap := make(map[string]bool)
@@ -831,6 +845,8 @@ func allTestsAllowRerunSuccess(testsBank map[string]*register.Test, testsToRerun
 		testAllowsRerunSuccess := false
 		for _, tag := range testsBank[test].Tags {
 			if rerunSuccessTagMap[tag] {
+				plog.Warningf("Test %s with tag %s allows re-run success", test, tag)
+
 				testAllowsRerunSuccess = true
 			}
 		}
@@ -1584,23 +1600,34 @@ func runTest(h *harness.H, t *register.Test, pltfrm string, flight platform.Flig
 	defer func() {
 		h.StopExecTimer()
 		c.Destroy()
+        if h.TimedOut() {
+            // We'll allow tests that time out to succeed on rerun.
+            plog.Warningf("Test timed out. Adding as candidate for rerun success: %s", t.Name)
+            t.Tags = append(t.Tags, "rerun-success")
+        }
 		if testSkipBaseChecks(t) {
 			plog.Debugf("Skipping base checks for %s", t.Name)
 			return
 		}
-		for id, output := range c.ConsoleOutput() {
-			for _, badness := range CheckConsole([]byte(output), t) {
-				if !SkipConsoleWarnings {
-					h.Errorf("Found %s on machine %s console", badness, id)
+        handleConsoleChecks := func(logtype, id, output string) {
+            plog.Warningf("checking %s, %s", id, output)
+			warnOnly, badlines := CheckConsole([]byte(output), t)
+            if SkipConsoleWarnings {
+                warnOnly = true
+            }
+			for _, badline := range badlines {
+				if warnOnly {
+					plog.Warningf("Found %s on machine %s %s", badline, id, logtype)
 				} else {
-					plog.Warningf("Found %s on machine %s console", badness, id)
+					h.Errorf("Found %s on machine %s %s", badline, id, logtype)
 				}
 			}
+        }
+		for id, output := range c.ConsoleOutput() {
+            handleConsoleChecks("console", id, output)
 		}
 		for id, output := range c.JournalOutput() {
-			for _, badness := range CheckConsole([]byte(output), t) {
-				h.Errorf("Found %s on machine %s journal", badness, id)
-			}
+            handleConsoleChecks("journal", id, output)
 		}
 	}()
 
@@ -1630,6 +1657,8 @@ func runTest(h *harness.H, t *register.Test, pltfrm string, flight platform.Flig
 			return err
 		})
 		if err != nil {
+            plog.Warningf("Failed starting machines. Adding as candidate for rerun success: %s", t.Name)
+            t.Tags = append(t.Tags, "rerun-success")
 			h.Fatalf("Cluster failed starting machines: %v", err)
 		}
 	}
@@ -1741,25 +1770,39 @@ func scpKolet(machines []platform.Machine) error {
 }
 
 // CheckConsole checks some console output for badness and returns short
-// descriptions of any badness it finds. If t is specified, its flags are
+// descriptions of any bad lines it finds. If t is specified, its flags are
 // respected.
-func CheckConsole(output []byte, t *register.Test) []string {
-	var ret []string
+func CheckConsole(output []byte, t *register.Test) (bool, []string) {
+	var badlines []string
+    warnOnly, allowRerunSuccess := true, true
 	for _, check := range consoleChecks {
 		if check.skipFlag != nil && t != nil && t.HasFlag(*check.skipFlag) {
 			continue
 		}
 		match := check.match.FindSubmatch(output)
 		if match != nil {
-			badness := check.desc
+			badline := check.desc
 			if len(match) > 1 {
 				// include first subexpression
-				badness += fmt.Sprintf(" (%s)", match[1])
+				badline += fmt.Sprintf(" (%s)", match[1])
 			}
-			ret = append(ret, badness)
+			badlines = append(badlines, badline)
+            if !check.warnOnly {
+                warnOnly = false
+            }
+            if !check.allowRerunSuccess {
+                allowRerunSuccess = false
+            }
+
 		}
 	}
-	return ret
+    if allowRerunSuccess && t != nil {
+        // We'll allow tests that time out to succeed on rerun.
+        plog.Warningf("Found console message that is marked as allowing rerun success.")
+        plog.Warningf("Adding as candidate for rerun success: %s", t.Name)
+        t.Tags = append(t.Tags, "rerun-success")
+    }
+	return warnOnly, badlines
 }
 
 func SetupOutputDir(outputDir, platform string) (string, error) {
