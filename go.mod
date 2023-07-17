@@ -92,3 +92,40 @@ require (
 	google.golang.org/protobuf v1.31.0 // indirect
 	gopkg.in/ini.v1 v1.66.2 // indirect
 )
+
+// Perform replacements os we can include kubevirt.io/client-go code
+// in mantle. This shouldn't be needed but there were problems
+// importing the code from https://github.com/kubevirt/client-go.git
+// without this:
+//      go: warning: k8s.io/client-go@v12.0.0+incompatible: retracted by module author: pre-module versions are obsolete
+// There are various open issues in https://github.com/kubevirt/client-go.git
+// about this problem but no current solutions. These replacements
+// were taken directly from https://github.com/kubevirt/client-go/blob/6a56296474b2b2ff4c65d38d2ce1bb2761501b8b/go.mod#L74-L99
+replace (
+	k8s.io/api => k8s.io/api v0.26.3
+	k8s.io/apiextensions-apiserver => k8s.io/apiextensions-apiserver v0.26.3
+	k8s.io/apimachinery => k8s.io/apimachinery v0.26.3
+	k8s.io/apiserver => k8s.io/apiserver v0.26.3
+	k8s.io/cli-runtime => k8s.io/cli-runtime v0.26.3
+	k8s.io/client-go => k8s.io/client-go v0.26.3
+	k8s.io/cloud-provider => k8s.io/cloud-provider v0.26.3
+	k8s.io/cluster-bootstrap => k8s.io/cluster-bootstrap v0.26.3
+	k8s.io/code-generator => k8s.io/code-generator v0.26.3
+	k8s.io/component-base => k8s.io/component-base v0.26.3
+	k8s.io/cri-api => k8s.io/cri-api v0.26.3
+	k8s.io/csi-translation-lib => k8s.io/csi-translation-lib v0.26.3
+	k8s.io/klog => k8s.io/klog v0.4.0
+	k8s.io/kube-aggregator => k8s.io/kube-aggregator v0.26.3
+	k8s.io/kube-controller-manager => k8s.io/kube-controller-manager v0.26.3
+	k8s.io/kube-openapi => k8s.io/kube-openapi v0.0.0-20221012153701-172d655c2280
+	k8s.io/kube-proxy => k8s.io/kube-proxy v0.26.3
+	k8s.io/kube-scheduler => k8s.io/kube-scheduler v0.26.3
+	k8s.io/kubectl => k8s.io/kubectl v0.26.3
+	k8s.io/kubelet => k8s.io/kubelet v0.26.3
+	k8s.io/legacy-cloud-providers => k8s.io/legacy-cloud-providers v0.26.3
+	k8s.io/metrics => k8s.io/metrics v0.26.3
+	k8s.io/node-api => k8s.io/node-api v0.26.3
+	k8s.io/sample-apiserver => k8s.io/sample-apiserver v0.26.3
+	k8s.io/sample-cli-plugin => k8s.io/sample-cli-plugin v0.26.3
+	k8s.io/sample-controller => k8s.io/sample-controller v0.26.3
+)
