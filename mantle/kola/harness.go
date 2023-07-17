@@ -128,6 +128,7 @@ var (
 	// SkipConsoleWarnings is set via SkipConsoleWarningsTag in kola-denylist.yaml
 	SkipConsoleWarnings bool
 	DenylistedTests     []string // tests which are on the denylist
+	WarnOnErrorTests    []string // denylisted tests we are going to run and warn in case of error
 	Tags                []string // tags to be ran
 
 	// Sharding is a string of the form: hash:m/n where m and n are integers to run only tests which hash to m.
@@ -356,6 +357,7 @@ type DenyListObj struct {
 	Platforms  []string `yaml:"platforms"`
 	SnoozeDate string   `yaml:"snooze"`
 	OsVersion  []string `yaml:"osversion"`
+	Warn       bool     `yaml:"warn"`
 }
 
 type ManifestData struct {
@@ -451,11 +453,19 @@ func ParseDenyListYaml(pltfrm string) error {
 			snoozeDate, err := time.Parse(snoozeFormat, obj.SnoozeDate)
 			if err != nil {
 				return err
-			} else if today.After(snoozeDate) {
-				continue
 			}
-
-			fmt.Printf("🕒 Snoozing kola test pattern \"%s\" until %s:\n", obj.Pattern, snoozeDate.Format("Jan 02 2006"))
+			if today.After(snoozeDate) {
+				if !obj.Warn {
+					continue
+				}
+				fmt.Printf("⚠️  Warning kola test pattern \"%s\", snoozing expired on %s:\n", obj.Pattern, snoozeDate.Format("Jan 02 2006"))
+				WarnOnErrorTests = append(WarnOnErrorTests, obj.Pattern)
+			} else {
+				fmt.Printf("🕒 Snoozing kola test pattern \"%s\" until %s:\n", obj.Pattern, snoozeDate.Format("Jan 02 2006"))
+			}
+		} else if obj.Warn {
+			fmt.Printf("⚠️  Warning kola test pattern \"%s\":\n", obj.Pattern)
+			WarnOnErrorTests = append(WarnOnErrorTests, obj.Pattern)
 		} else {
 			fmt.Printf("⚠️  Skipping kola test pattern \"%s\":\n", obj.Pattern)
 		}
@@ -467,7 +477,7 @@ func ParseDenyListYaml(pltfrm string) error {
 		/// Process "special" patterns which aren't test names, but influence overall behavior
 		if obj.Pattern == SkipConsoleWarningsTag {
 			SkipConsoleWarnings = true
-		} else {
+		} else if !obj.Warn {
 			DenylistedTests = append(DenylistedTests, obj.Pattern)
 		}
 	}
@@ -854,8 +864,27 @@ func runProvidedTests(testsBank map[string]*register.Test, patterns []string, mu
 			return reRunErr
 		}
 	}
+
+	// Ignore the error when only denied tests with Warn:true feaute failed
+	if runErr != nil && allTestsWarnOnError(testResults.getResults()) {
+		return nil
+	}
+
 	// If the intial run failed and the rerun passed, we still return an error
 	return runErr
+}
+
+func allTestsWarnOnError(tests []*harness.H) bool {
+	for _, test := range tests {
+		if !test.Failed() {
+			continue
+		}
+		if !IsWarningOnFailure(test.Name()) {
+			return false
+		}
+		fmt.Printf("--- ⚠️ IGNORE: \"%s\"\n", test.Name())
+	}
+	return true
 }
 
 func allTestsAllowRerunSuccess(testsBank map[string]*register.Test, testsToRerun, rerunSuccessTags []string) bool {
@@ -875,6 +904,9 @@ func allTestsAllowRerunSuccess(testsBank map[string]*register.Test, testsToRerun
 	// Iterate over the tests that were re-ran. If any of them don't
 	// allow rerun success then just exit early.
 	for _, test := range testsToRerun {
+		if IsWarningOnFailure(test) {
+			continue
+		}
 		testAllowsRerunSuccess := false
 		for _, tag := range testsBank[test].Tags {
 			if rerunSuccessTagMap[tag] {
@@ -911,6 +943,20 @@ func GetRerunnableTestName(testName string) (string, bool) {
 		// subtest of an exclusive test
 		return name, true
 	}
+}
+
+func IsWarningOnFailure(testName string) bool {
+	for _, pattern := range WarnOnErrorTests {
+		found, err := filepath.Match(pattern, testName)
+		if err != nil {
+			plog.Fatal(err)
+			return false
+		}
+		if found {
+			return true
+		}
+	}
+	return false
 }
 
 func getRerunnable(tests []*harness.H) []string {
