@@ -468,7 +468,7 @@ func ParseDenyListYaml(pltfrm string) error {
 			fmt.Printf("⚠️  Warning kola test pattern \"%s\":\n", obj.Pattern)
 			WarnOnErrorTests = append(WarnOnErrorTests, obj.Pattern)
 		} else {
-			fmt.Printf("⚠️  Skipping kola test pattern \"%s\":\n", obj.Pattern)
+			fmt.Printf("⏭️  Skipping kola test pattern \"%s\":\n", obj.Pattern)
 		}
 
 		if obj.Tracker != "" {
