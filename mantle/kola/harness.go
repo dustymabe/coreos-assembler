@@ -33,6 +33,7 @@ import (
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v2"
 
+	"github.com/coreos/coreos-assembler/mantle/cli"
 	"github.com/coreos/coreos-assembler/mantle/harness"
 	"github.com/coreos/coreos-assembler/mantle/harness/reporters"
 	"github.com/coreos/coreos-assembler/mantle/kola/cluster"
@@ -867,7 +868,7 @@ func runProvidedTests(testsBank map[string]*register.Test, patterns []string, mu
 
 	// Ignore the error when only denied tests with Warn:true feaute failed
 	if runErr != nil && allTestsWarnOnError(testResults.getResults()) {
-		return nil
+		return cli.ErrExitWarning77
 	}
 
 	// If the intial run failed and the rerun passed, we still return an error
