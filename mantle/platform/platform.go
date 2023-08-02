@@ -182,7 +182,8 @@ type Options struct {
 	CosaBuildId   string
 	CosaBuildArch string
 
-	NoTestExitError bool
+	NoTestExitError   bool
+	UseExitWarnCode77 bool
 
 	AppendButane   string
 	AppendIgnition string

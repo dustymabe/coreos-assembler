@@ -684,7 +684,7 @@ func filterDenylistedTests(tests map[string]*register.Test) (map[string]*registe
 // register tests in their init() function.  outputDir is where various test
 // logs and data will be written for analysis after the test run. If it already
 // exists it will be erased!
-func runProvidedTests(testsBank map[string]*register.Test, patterns []string, multiply int, rerun bool, rerunSuccessTags []string, pltfrm, outputDir string, propagateTestErrors bool) error {
+func runProvidedTests(testsBank map[string]*register.Test, patterns []string, multiply int, rerun bool, rerunSuccessTags []string, pltfrm, outputDir string, propagateTestErrors bool, useExitWarnCode77 bool) error {
 	var versionStr string
 
 	// Avoid incurring cost of starting machine in getClusterSemver when
@@ -860,7 +860,7 @@ func runProvidedTests(testsBank map[string]*register.Test, patterns []string, mu
 	if len(testsToRerun) > 0 && rerun {
 		newOutputDir := filepath.Join(outputDir, "rerun")
 		fmt.Printf("\n\n======== Re-running failed tests (flake detection) ========\n\n")
-		reRunErr := runProvidedTests(testsBank, testsToRerun, multiply, false, rerunSuccessTags, pltfrm, newOutputDir, propagateTestErrors)
+		reRunErr := runProvidedTests(testsBank, testsToRerun, multiply, false, rerunSuccessTags, pltfrm, newOutputDir, propagateTestErrors, useExitWarnCode77)
 
 		// Return the results from the rerun if rerun success allowed
 		if allTestsAllowRerunSuccess(testsBank, testsToRerun, rerunSuccessTags) {
@@ -870,8 +870,10 @@ func runProvidedTests(testsBank map[string]*register.Test, patterns []string, mu
 
 	// Ignore the error when only denied tests with Warn:true feature failed
 	if runErr != nil && allFailedTestsAreWarnOnError(testResults.getResults()) {
-		return cli.ErrExitWarning77
-
+		if useExitWarnCode77 {
+			return cli.ErrExitWarning77
+		}
+		return nil
 	}
 
 	// If the intial run failed and the rerun passed, we still return an error
@@ -979,12 +981,12 @@ func getRerunnable(tests []*harness.H) []string {
 	return testsToRerun
 }
 
-func RunTests(patterns []string, multiply int, rerun bool, rerunSuccessTags []string, pltfrm, outputDir string, propagateTestErrors bool) error {
-	return runProvidedTests(register.Tests, patterns, multiply, rerun, rerunSuccessTags, pltfrm, outputDir, propagateTestErrors)
+func RunTests(patterns []string, multiply int, rerun bool, rerunSuccessTags []string, pltfrm, outputDir string, propagateTestErrors bool, useExitWarnCode77 bool) error {
+	return runProvidedTests(register.Tests, patterns, multiply, rerun, rerunSuccessTags, pltfrm, outputDir, propagateTestErrors, useExitWarnCode77)
 }
 
-func RunUpgradeTests(patterns []string, rerun bool, pltfrm, outputDir string, propagateTestErrors bool) error {
-	return runProvidedTests(register.UpgradeTests, patterns, 0, rerun, nil, pltfrm, outputDir, propagateTestErrors)
+func RunUpgradeTests(patterns []string, rerun bool, pltfrm, outputDir string, propagateTestErrors bool, useExitWarnCode77 bool) error {
+	return runProvidedTests(register.UpgradeTests, patterns, 0, rerun, nil, pltfrm, outputDir, propagateTestErrors, useExitWarnCode77)
 }
 
 // externalTestMeta is parsed from kola.json in external tests
