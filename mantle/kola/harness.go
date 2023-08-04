@@ -33,7 +33,6 @@ import (
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v2"
 
-	"github.com/coreos/coreos-assembler/mantle/cli"
 	"github.com/coreos/coreos-assembler/mantle/harness"
 	"github.com/coreos/coreos-assembler/mantle/harness/reporters"
 	"github.com/coreos/coreos-assembler/mantle/kola/cluster"
@@ -131,6 +130,8 @@ var (
 	DenylistedTests     []string // tests which are on the denylist
 	WarnOnErrorTests    []string // denylisted tests we are going to run and warn in case of error
 	Tags                []string // tags to be ran
+
+	ErrWarnOnTestFail = errors.New("A test marked as warn:true failed.")
 
 	// Sharding is a string of the form: hash:m/n where m and n are integers to run only tests which hash to m.
 	Sharding string
@@ -684,7 +685,7 @@ func filterDenylistedTests(tests map[string]*register.Test) (map[string]*registe
 // register tests in their init() function.  outputDir is where various test
 // logs and data will be written for analysis after the test run. If it already
 // exists it will be erased!
-func runProvidedTests(testsBank map[string]*register.Test, patterns []string, multiply int, rerun bool, rerunSuccessTags []string, pltfrm, outputDir string, propagateTestErrors bool, useExitWarnCode77 bool) error {
+func runProvidedTests(testsBank map[string]*register.Test, patterns []string, multiply int, rerun bool, rerunSuccessTags []string, pltfrm, outputDir string, propagateTestErrors bool) error {
 	var versionStr string
 
 	// Avoid incurring cost of starting machine in getClusterSemver when
@@ -860,7 +861,7 @@ func runProvidedTests(testsBank map[string]*register.Test, patterns []string, mu
 	if len(testsToRerun) > 0 && rerun {
 		newOutputDir := filepath.Join(outputDir, "rerun")
 		fmt.Printf("\n\n======== Re-running failed tests (flake detection) ========\n\n")
-		reRunErr := runProvidedTests(testsBank, testsToRerun, multiply, false, rerunSuccessTags, pltfrm, newOutputDir, propagateTestErrors, useExitWarnCode77)
+		reRunErr := runProvidedTests(testsBank, testsToRerun, multiply, false, rerunSuccessTags, pltfrm, newOutputDir, propagateTestErrors)
 
 		// Return the results from the rerun if rerun success allowed
 		if allTestsAllowRerunSuccess(testsBank, testsToRerun, rerunSuccessTags) {
@@ -870,10 +871,7 @@ func runProvidedTests(testsBank map[string]*register.Test, patterns []string, mu
 
 	// Ignore the error when only denied tests with Warn:true feature failed
 	if runErr != nil && allFailedTestsAreWarnOnError(testResults.getResults()) {
-		if useExitWarnCode77 {
-			return cli.ErrExitWarning77
-		}
-		return nil
+		return ErrWarnOnTestFail
 	}
 
 	// If the intial run failed and the rerun passed, we still return an error
@@ -981,12 +979,12 @@ func getRerunnable(tests []*harness.H) []string {
 	return testsToRerun
 }
 
-func RunTests(patterns []string, multiply int, rerun bool, rerunSuccessTags []string, pltfrm, outputDir string, propagateTestErrors bool, useExitWarnCode77 bool) error {
-	return runProvidedTests(register.Tests, patterns, multiply, rerun, rerunSuccessTags, pltfrm, outputDir, propagateTestErrors, useExitWarnCode77)
+func RunTests(patterns []string, multiply int, rerun bool, rerunSuccessTags []string, pltfrm, outputDir string, propagateTestErrors bool) error {
+	return runProvidedTests(register.Tests, patterns, multiply, rerun, rerunSuccessTags, pltfrm, outputDir, propagateTestErrors)
 }
 
-func RunUpgradeTests(patterns []string, rerun bool, pltfrm, outputDir string, propagateTestErrors bool, useExitWarnCode77 bool) error {
-	return runProvidedTests(register.UpgradeTests, patterns, 0, rerun, nil, pltfrm, outputDir, propagateTestErrors, useExitWarnCode77)
+func RunUpgradeTests(patterns []string, rerun bool, pltfrm, outputDir string, propagateTestErrors bool) error {
+	return runProvidedTests(register.UpgradeTests, patterns, 0, rerun, nil, pltfrm, outputDir, propagateTestErrors)
 }
 
 // externalTestMeta is parsed from kola.json in external tests
