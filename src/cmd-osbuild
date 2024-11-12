@@ -5,10 +5,22 @@ dn=$(dirname "$0")
 # shellcheck source=src/cmdlib.sh
 . "${dn}"/cmdlib.sh
 
+# A list of supported platforms and the filename suffix of the main
+# artifact that platform produces.
+declare -A SUPPORTED_PLATFORMS=(
+    ['applehv']='raw'
+    ['gcp']='tar.gz'
+    ['hyperv']='vhdx'
+    ['metal4k']='raw'
+    ['metal']='raw'
+    ['qemu']='qcow2'
+    ['qemu-secex']='qcow2'
+)
 
 print_help() {
     cat 1>&2 <<EOF
 Usage: coreos-assembler osbuild --help
+       coreos-assembler osbuild --supported-platforms
        coreos-assembler osbuild [--build ID] --platforms qemu,metal,...
 
   Build artifacts for the given platforms using OSBuild.
@@ -204,7 +216,7 @@ main() {
         *) fatal "called as unexpected name $0";;
     esac
 
-    options=$(getopt --options h --longoptions help,force,build:,genprotimgvm:,platforms: -- "$@") || {
+    options=$(getopt --options h --longoptions help,force,build:,genprotimgvm:,platforms:,supported-platforms -- "$@") || {
         print_help
         exit 1
     }
@@ -230,6 +242,11 @@ main() {
                 shift # The arg is next in position args
                 # Split the comma separated string of platforms into an array
                 IFS=, read -ra platforms <<<"$1"
+                ;;
+            --supported-platforms)
+                # Just print the platforms we support and exit
+                echo "${!SUPPORTED_PLATFORMS[*]}"
+                exit 0
                 ;;
             --)
                 shift
@@ -284,6 +301,12 @@ main() {
     # by prepare_build since the config might've changed since then
     name=$(meta_key name)
 
+    for platform in "${platforms[@]}"; do
+        if [ -z "${SUPPORTED_PLATFORMS[$platform]:-}" ]; then
+            fatal "unknown platform provided: ${platform}"
+        fi
+    done
+
     tobuild=()
     building_qemu=0
     for platform in "${platforms[@]}"; do
@@ -319,14 +342,7 @@ main() {
                 --platforms "$(IFS=,; echo "${platforms[*]}")"
 
     for platform in "${platforms[@]}"; do
-        suffix=
-        case $platform in
-            applehv|metal|metal4k) suffix=raw ;;
-            gcp) suffix=tar.gz ;;
-            hyperv) suffix=vhdx ;;
-            qemu|qemu-secex) suffix=qcow2 ;;
-            *) fatal "unknown platform provided" ;;
-        esac
+        suffix="${SUPPORTED_PLATFORMS[$platform]}"
 
         # Set the filename of the artifact and the local image path
         # where the file will reside temporarily and move it there
