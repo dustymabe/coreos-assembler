@@ -173,10 +173,8 @@ patch_osbuild() {
     mv /usr/bin/osbuild-mpp /usr/lib/osbuild/tools/
 
     # Now all the software is under the /usr/lib/osbuild dir and we can patch
-    cat /usr/lib/coreos-assembler/0001-osbuild-remoteloop-add-more-loop-device-options.patch      \
-        /usr/lib/coreos-assembler/0001-util-osrelease.py-Replaced-string-stripping-with-shl.patch \
-        /usr/lib/coreos-assembler/0005-stages-add-coreos.live-artifacts.mono-stage.patch          \
-            | patch -d /usr/lib/osbuild -p1
+    cat patch.patch \
+        | patch -d /usr/lib/osbuild -p1
 
     # And then move the files back; supermin appliance creation will need it back
     # in the places delivered by the RPM.
@@ -199,5 +197,5 @@ else
   install_ocp_tools
   trust_redhat_gpg_keys
   configure_user
-  patch_osbuild
+ #patch_osbuild
 fi
