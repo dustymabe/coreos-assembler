@@ -29,7 +29,7 @@ func CopyRegularFile(src, dest string) (err error) {
 	if err != nil {
 		return err
 	}
-	defer srcFile.Close()
+	defer func() { _ = srcFile.Close() }()
 
 	srcInfo, err := srcFile.Stat()
 	if err != nil {

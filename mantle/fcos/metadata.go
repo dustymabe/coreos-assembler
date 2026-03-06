@@ -35,7 +35,11 @@ func fetchURL(u url.URL) ([]byte, error) {
 	}
 
 	body, err := io.ReadAll(res.Body)
-	res.Body.Close()
+	if closeErr := res.Body.Close(); closeErr != nil {
+		if err == nil {
+			return nil, closeErr
+		}
+	}
 	if err != nil {
 		return nil, err
 	}

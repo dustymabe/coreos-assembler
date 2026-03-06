@@ -302,7 +302,7 @@ func (inst *QemuInstance) Destroy() {
 	if inst.journalPipe != nil {
 		plog.Debugf("Sleep 1 to allow for more journal messages to get flushed")
 		time.Sleep(1 * time.Second)
-		inst.journalPipe.Close()
+		_ = inst.journalPipe.Close()
 		inst.journalPipe = nil
 	}
 	// kill is safe if already dead
@@ -355,7 +355,6 @@ func (inst *QemuInstance) SwitchBootOrder() (err2 error) {
 		case "child<virtio-net-pci>", "child<virtio-net-ccw>":
 			bootdev = filepath.Join("/machine/peripheral-anon", dev.Name)
 		default:
-			break
 		}
 	}
 	// Get boot device for ISO boots and target block device
@@ -373,20 +372,19 @@ func (inst *QemuInstance) SwitchBootOrder() (err2 error) {
 				bootdev = devpath
 			}
 		default:
-			break
 		}
 	}
 
 	if bootdev == "" {
-		return fmt.Errorf("Could not find boot device using QMP.\n"+
-			"Full list of peripherals: %v.\n"+
-			"Full list of block devices: %v.\n",
+		return fmt.Errorf("could not find boot device using QMP, "+
+			"full list of peripherals: %v, "+
+			"full list of block devices: %v",
 			devs.Return, blkdevs.Return)
 	}
 
 	if primarydev == "" {
-		return fmt.Errorf("Could not find target disk using QMP.\n"+
-			"Full list of block devices: %v.\n",
+		return fmt.Errorf("could not find target disk using QMP, "+
+			"full list of block devices: %v",
 			blkdevs.Return)
 	}
 
@@ -679,7 +677,7 @@ func (builder *QemuBuilder) setupNetworking() error {
 		if err != nil {
 			return err
 		}
-		l.Close()
+		_ = l.Close()
 		builder.requestedHostForwardPorts[i].HostPort = l.Addr().(*net.TCPAddr).Port
 		netdev += fmt.Sprintf(",hostfwd=tcp:127.0.0.1:%d-:%d",
 			builder.requestedHostForwardPorts[i].HostPort,
@@ -910,7 +908,7 @@ func newGuestfish(arch, diskImagePath string, diskSectorSize int) (*coreosGuestf
 	if err != nil {
 		return nil, errors.Wrapf(err, "getting stdout pipe")
 	}
-	defer stdout.Close()
+	defer func() { _ = stdout.Close() }()
 
 	if err := cmd.Start(); err != nil {
 		return nil, errors.Wrapf(err, "running guestfish")
@@ -1265,7 +1263,7 @@ func (builder *QemuBuilder) addDiskImpl(disk *Disk, primary bool) error {
 
 			for i := 0; i < 2; i++ {
 				if i == 1 {
-					opts = strings.Replace(opts, "bootindex=1", "bootindex=2", -1)
+					opts = strings.ReplaceAll(opts, "bootindex=1", "bootindex=2")
 				}
 				pID := fmt.Sprintf("mpath%d%d", builder.diskID, i)
 				scsiID := fmt.Sprintf("scsi_%s", pID)
@@ -2136,10 +2134,9 @@ func (builder *QemuBuilder) Exec() (*QemuInstance, error) {
 			var cdrom string
 			for _, dev := range devs.Return {
 				switch dev.Type {
-				case "child<scsi-cd>":
-					cdrom = filepath.Join("/machine/peripheral-anon", dev.Name)
-				default:
-					break
+			case "child<scsi-cd>":
+				cdrom = filepath.Join("/machine/peripheral-anon", dev.Name)
+			default:
 				}
 			}
 			if cdrom == "" {

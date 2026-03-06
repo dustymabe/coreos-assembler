@@ -259,7 +259,7 @@ func (build *Build) artifacts() map[string]*Artifact {
 	// as a top level entry.
 	ret["extensions"] = build.Extensions.toArtifact()
 
-	var ba BuildArtifacts = *build.BuildArtifacts
+	var ba = *build.BuildArtifacts
 	rv := reflect.TypeOf(ba)
 	for i := 0; i < rv.NumField(); i++ {
 		tag := rv.Field(i).Tag.Get("json")
@@ -323,7 +323,7 @@ func FetchAndParseBuild(url string) (*Build, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 	if res.StatusCode != 200 {
 		return nil, fmt.Errorf(
 			"Received a %d error in http response for: %s", res.StatusCode, url)

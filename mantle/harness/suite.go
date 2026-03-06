@@ -207,7 +207,11 @@ func (s *Suite) Run() (err error) {
 	if err != nil {
 		return err
 	}
-	defer tap.Close()
+	defer func() {
+		if err2 := tap.Close(); err == nil {
+			err = err2
+		}
+	}()
 	if _, err := fmt.Fprintf(tap, "1..%d\n", len(s.tests)); err != nil {
 		return err
 	}

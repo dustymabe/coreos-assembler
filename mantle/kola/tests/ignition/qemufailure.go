@@ -125,11 +125,12 @@ func verifyError(builder *platform.QemuBuilder, searchPattern string) error {
 	errchan := make(chan error)
 	go func() {
 		resultingError := inst.WaitAll(ctx)
-		if resultingError == nil {
+		switch resultingError {
+		case nil:
 			resultingError = fmt.Errorf("ignition unexpectedly succeeded")
-		} else if resultingError == platform.ErrInitramfsEmergency {
+		case platform.ErrInitramfsEmergency:
 			resultingError = checkConsole(builder.ConsoleFile, searchPattern)
-		} else {
+		default:
 			resultingError = errors.Wrapf(resultingError, "expected initramfs emergency.target error")
 		}
 		errchan <- resultingError

@@ -119,7 +119,9 @@ func initializeGlobalState(argv []string) error {
 	// Set PYTHONUNBUFFERED=1 so that we get unbuffered output. We should
 	// be able to do this on the shebang lines but env doesn't support args
 	// right now. In Fedora we should be able to use the `env -S` option.
-	os.Setenv("PYTHONUNBUFFERED", "1")
+	if err := os.Setenv("PYTHONUNBUFFERED", "1"); err != nil {
+		return fmt.Errorf("failed to set PYTHONUNBUFFERED: %w", err)
+	}
 
 	// docker/podman don't run through PAM, but we want this set for the privileged
 	// (non-virtualized) path
@@ -131,7 +133,9 @@ func initializeGlobalState(argv []string) error {
 		} else {
 			user = "cosa"
 		}
-		os.Setenv("USER", user)
+		if err := os.Setenv("USER", user); err != nil {
+			return fmt.Errorf("failed to set USER: %w", err)
+		}
 	}
 
 	// https://github.com/containers/libpod/issues/1448

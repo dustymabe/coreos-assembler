@@ -84,12 +84,16 @@ func (r *jsonReporter) ReportTest(name string, subtests []string, result testres
 	})
 }
 
-func (r *jsonReporter) Output(path string) error {
+func (r *jsonReporter) Output(path string) (retErr error) {
 	f, err := os.Create(filepath.Join(path, r.filename))
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() {
+		if closeErr := f.Close(); closeErr != nil && retErr == nil {
+			retErr = closeErr
+		}
+	}()
 
 	return json.NewEncoder(f).Encode(r)
 }

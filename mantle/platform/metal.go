@@ -232,7 +232,7 @@ func (inst *Install) setup(kern *kernelSetup) (*installerRun, error) {
 	cleanupTempdir := true
 	defer func() {
 		if cleanupTempdir {
-			os.RemoveAll(tempdir)
+			_ = os.RemoveAll(tempdir)
 		}
 	}()
 
@@ -514,13 +514,13 @@ func cat(outfile string, infiles ...string) error {
 	if err != nil {
 		return err
 	}
-	defer out.Close()
+	defer func() { _ = out.Close() }()
 	for _, infile := range infiles {
 		in, err := os.Open(infile)
 		if err != nil {
 			return err
 		}
-		defer in.Close()
+		defer func() { _ = in.Close() }()
 		_, err = io.Copy(out, in)
 		if err != nil {
 			return err
@@ -646,7 +646,7 @@ func (inst *Install) InstallViaISOEmbed(kargs []string, liveIgnition, targetIgni
 	cleanupTempdir := true
 	defer func() {
 		if cleanupTempdir {
-			os.RemoveAll(tempdir)
+			_ = os.RemoveAll(tempdir)
 		}
 	}()
 

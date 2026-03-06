@@ -50,7 +50,7 @@ func TestTimeoutBasic(t *testing.T) {
 	// In the kola tests, we check for timeouts in the SSH code
 	// to exit running goroutines
 
-	if !(timeToRun-slack < total && total < timeToRun+slack) {
+	if timeToRun-slack >= total || total >= timeToRun+slack {
 		t.Errorf("Expected: %v +/- %v, Got: %v", timeToRun, slack, total)
 	}
 
@@ -80,7 +80,7 @@ func TestTimeoutNoInterrupt(t *testing.T) {
 	}
 	total := time.Since(start)
 
-	if !(timeToRun-slack < total && total < timeToRun+slack) {
+	if timeToRun-slack >= total || total >= timeToRun+slack {
 		t.Errorf("Expected: %v +/- %v, Got: %v", timeToRun, slack, total)
 	}
 }

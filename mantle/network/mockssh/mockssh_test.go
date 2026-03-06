@@ -35,7 +35,7 @@ func TestExitStatusZero(t *testing.T) {
 			t.Error(err)
 		}
 	})
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	session, err := client.NewSession()
 	if err != nil {
@@ -53,7 +53,7 @@ func TestExitStatusNonzero(t *testing.T) {
 			t.Error(err)
 		}
 	})
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	session, err := client.NewSession()
 	if err != nil {
@@ -70,9 +70,9 @@ func TestExitStatusNonzero(t *testing.T) {
 
 func TestExitStatusMissing(t *testing.T) {
 	client := NewMockClient(func(s *Session) {
-		s.Close()
+		_ = s.Close()
 	})
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	session, err := client.NewSession()
 	if err != nil {
