@@ -514,7 +514,8 @@ func checkSystemdUnitStuck(output string, m Machine) error {
 // CheckMachine tests a machine for various error conditions such as ssh
 // being available and no systemd units failing at the time ssh is reachable.
 // It also ensures the remote system is running Container Linux by CoreOS or
-// Red Hat CoreOS.
+// Red Hat CoreOS. The context parameter will set a time limit for the
+// SSH connection. If none is provided, a 10 minute limit will be used.
 func CheckMachine(ctx context.Context, m Machine) error {
 	// ensure ssh works and the system is ready
 	sshChecker := func() error {
@@ -534,7 +535,7 @@ func CheckMachine(ctx context.Context, m Machine) error {
 		return nil
 	}
 
-	if err := util.RetryUntilTimeout(10*time.Minute, 10*time.Second, sshChecker); err != nil {
+	if err := util.RetryUntilTimeoutCtx(ctx, 10*time.Minute, 10*time.Second, sshChecker); err != nil {
 		return errors.Wrapf(err, "ssh unreachable")
 	}
 
