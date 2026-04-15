@@ -89,11 +89,15 @@ func NewJournal(dir string) (*Journal, error) {
 }
 
 // Start begins/resumes streaming the system journal to journal.txt.
-func (j *Journal) Start(ctx context.Context, m Machine, oldBootId string) error {
+func (j *Journal) Start(m Machine, oldBootId string) error {
 	if j.cancel != nil {
 		j.cancel()
 		j.cancel = nil
 		_ = j.recorder.Wait() // Just need to consume the status.
+	}
+	ctx := m.RuntimeConf().TestExecTimeout
+	if ctx == nil {
+		ctx = context.Background()
 	}
 	ctx, cancel := context.WithCancel(ctx)
 

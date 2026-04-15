@@ -516,7 +516,13 @@ func checkSystemdUnitStuck(output string, m Machine) error {
 // It also ensures the remote system is running Container Linux by CoreOS or
 // Red Hat CoreOS. The context parameter will set a time limit for the
 // SSH connection. If none is provided, a 10 minute limit will be used.
-func CheckMachine(ctx context.Context, m Machine) error {
+func CheckMachine(m Machine) error {
+	// If one is set grab the context from the machine runtime conf
+	ctx := m.RuntimeConf().TestExecTimeout
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	// ensure ssh works and the system is ready
 	sshChecker := func() error {
 		if err := ctx.Err(); err != nil {
