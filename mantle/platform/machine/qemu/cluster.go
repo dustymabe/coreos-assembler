@@ -136,6 +136,13 @@ func (qc *Cluster) NewMachineWithBuilder(userdata any, options platform.MachineO
 			return nil, fmt.Errorf("failed to allocate vsock CID: %w", err)
 		}
 		qemuBuilder.EnableVsock(cid)
+		// Optionally inject systemd units for vsock SSH into the guest.
+		// This is useful for guests without systemd-ssh-generator (e.g. RHCOS 9).
+		if os.Getenv("INJECT_VSOCK_SSH_UNITS") != "" {
+			config.AddSystemdUnit("sshd-vsock.socket", sshdVsockSocketUnit, conf.Enable)
+			config.AddSystemdUnit("sshd-vsock@.service", sshdVsockServiceUnit, conf.NoState)
+			plog.Infof("Injected vsock SSH systemd units into guest Ignition config")
+		}
 	}
 
 	// Since we are on qemu let's just use non-network based journal
@@ -385,3 +392,33 @@ func (qc *Cluster) Instance(m platform.Machine) *platform.QemuInstance {
 	}
 	return qm.inst
 }
+
+// sshdVsockSocketUnit is a systemd socket unit that listens for SSH
+// connections over AF_VSOCK on port 22. This replicates what
+// systemd-ssh-generator does automatically on systemd >= 256.
+const sshdVsockSocketUnit = `[Unit]
+Description=OpenSSH Server Socket (vsock)
+
+[Socket]
+ListenStream=vsock::22
+Accept=yes
+
+[Install]
+WantedBy=sockets.target
+`
+
+// sshdVsockServiceUnit is a systemd template service unit that handles
+// per-connection SSH sessions received via the vsock socket.
+const sshdVsockServiceUnit = `[Unit]
+Description=OpenSSH Per-Connection Server (vsock)
+Wants=sshd-keygen.target
+After=sshd-keygen.target
+
+[Service]
+EnvironmentFile=-/etc/sysconfig/sshd
+ExecStart=/usr/sbin/sshd -i $OPTIONS
+StandardInput=socket
+# SELinux on RHEL 9 doesn't allow vsock sshd to work and it's not worth
+# investigating since we use this only in limited cases.
+ExecStartPre=/usr/sbin/setenforce 0
+`
