@@ -123,8 +123,10 @@ func (qc *Cluster) NewMachineWithBuilder(userdata any, options platform.MachineO
 		}
 	}
 
-	// Set up vsock if available on the host
-	if platform.VsockAvailable() {
+	// Set up vsock if available on the host and usermode networking is not
+	// being used for SSH. The two are mutually exclusive: usermode networking
+	// uses TCP port forwarding, vsock uses AF_VSOCK directly.
+	if !qemuBuilder.UsermodeNetworking && platform.VsockAvailable() {
 		cid, err := platform.FindUnusedVsockCID()
 		if err != nil {
 			plog.Warningf("Failed to allocate vsock CID, falling back to TCP: %v", err)
@@ -159,6 +161,9 @@ func (qc *Cluster) NewMachineWithBuilder(userdata any, options platform.MachineO
 			qm.Destroy()
 			return nil, err
 		}
+	} else if inst.VsockCID() > 0 {
+		// vsock address is known immediately, no need to retry
+		qm.ip = fmt.Sprintf("vsock:%d", inst.VsockCID())
 	}
 
 	// Run StartMachine, which blocks on the machine being booted up enough
