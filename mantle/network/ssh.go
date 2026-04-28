@@ -132,7 +132,12 @@ func (a *SSHAgent) Close() error {
 }
 
 // Add port to host if not already set.
+// For vsock addresses (e.g. "vsock:42"), the address is returned unchanged
+// since vsock uses its own addressing scheme.
 func ensurePortSuffix(host string, port int) string {
+	if strings.HasPrefix(host, "vsock:") {
+		return host
+	}
 	switch {
 	case !strings.Contains(host, ":"):
 		return fmt.Sprintf("%s:%d", host, port)
