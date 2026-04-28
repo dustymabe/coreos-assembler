@@ -123,16 +123,19 @@ func (qc *Cluster) NewMachineWithBuilder(userdata any, options platform.MachineO
 		}
 	}
 
-	// Set up vsock if available on the host and usermode networking is not
-	// being used for SSH. The two are mutually exclusive: usermode networking
-	// uses TCP port forwarding, vsock uses AF_VSOCK directly.
-	if !qemuBuilder.UsermodeNetworking && platform.VsockAvailable() {
+	// Set up vsock if usermode networking is not being used for SSH.
+	// The two are mutually exclusive: usermode networking uses TCP port
+	// forwarding, vsock uses AF_VSOCK directly. Without usermode networking,
+	// vsock is the only SSH transport so failures here are fatal.
+	if !qemuBuilder.UsermodeNetworking {
+		if !platform.VsockAvailable() {
+			return nil, fmt.Errorf("vsock is required for SSH when usermode networking is disabled, but /dev/vhost-vsock is not available")
+		}
 		cid, err := platform.FindUnusedVsockCID()
 		if err != nil {
-			plog.Warningf("Failed to allocate vsock CID, falling back to TCP: %v", err)
-		} else {
-			qemuBuilder.EnableVsock(cid)
+			return nil, fmt.Errorf("failed to allocate vsock CID: %w", err)
 		}
+		qemuBuilder.EnableVsock(cid)
 	}
 
 	// Since we are on qemu let's just use non-network based journal
