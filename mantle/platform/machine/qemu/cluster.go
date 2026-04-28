@@ -123,6 +123,16 @@ func (qc *Cluster) NewMachineWithBuilder(userdata any, options platform.MachineO
 		}
 	}
 
+	// Set up vsock if available on the host
+	if platform.VsockAvailable() {
+		cid, err := platform.FindUnusedVsockCID()
+		if err != nil {
+			plog.Warningf("Failed to allocate vsock CID, falling back to TCP: %v", err)
+		} else {
+			qemuBuilder.EnableVsock(cid)
+		}
+	}
+
 	// Since we are on qemu let's just use non-network based journal
 	// (if we have a config to add it to) so that we'll get it even
 	// if offline OR if networking for some reason doesn't come up.

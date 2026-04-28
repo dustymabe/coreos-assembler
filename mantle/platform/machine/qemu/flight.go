@@ -17,6 +17,7 @@ package qemu
 import (
 	"github.com/coreos/pkg/capnslog"
 
+	"github.com/coreos/coreos-assembler/mantle/network"
 	"github.com/coreos/coreos-assembler/mantle/platform"
 	"github.com/coreos/coreos-assembler/mantle/platform/conf"
 )
@@ -78,7 +79,7 @@ var (
 )
 
 func NewFlight(opts *Options) (platform.Flight, error) {
-	bf, err := platform.NewBaseFlight(opts.Options, Platform)
+	bf, err := platform.NewBaseFlightWithDialer(opts.Options, Platform, network.NewHybridDialer())
 	if err != nil {
 		return nil, err
 	}
