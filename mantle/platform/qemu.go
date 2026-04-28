@@ -185,6 +185,9 @@ type QemuInstance struct {
 
 	qmpSocket     *qmp.SocketMonitor
 	qmpSocketPath string
+
+	// vsockCID is the vsock context ID assigned to this VM, or 0 if vsock is not enabled.
+	vsockCID uint32
 }
 
 // Signaled returns whether QEMU process was signaled.
@@ -197,14 +200,24 @@ func (inst *QemuInstance) Pid() int {
 	return inst.qemu.Pid()
 }
 
+// VsockCID returns the vsock context ID assigned to this VM, or 0 if vsock is not enabled.
+func (inst *QemuInstance) VsockCID() uint32 {
+	return inst.vsockCID
+}
+
 // Kill kills the VM instance.
 func (inst *QemuInstance) Kill() error {
 	plog.Debugf("Killing qemu (%v)", inst.qemu.Pid())
 	return inst.qemu.Kill()
 }
 
-// SSHAddress returns the IP address with the forwarded port (host-side).
+// SSHAddress returns the address to use for SSH connections.
+// If vsock is enabled, returns a vsock address (e.g. "vsock:42").
+// Otherwise, returns the TCP address with the forwarded port (host-side).
 func (inst *QemuInstance) SSHAddress() (string, error) {
+	if inst.vsockCID > 0 {
+		return fmt.Sprintf("vsock:%d", inst.vsockCID), nil
+	}
 	for _, fwdPorts := range inst.hostForwardedPorts {
 		if fwdPorts.Service == "ssh" {
 			return fmt.Sprintf("127.0.0.1:%d", fwdPorts.HostPort), nil
@@ -557,6 +570,9 @@ type QemuBuilder struct {
 	// IBM Secure Execution
 	secureExecution bool
 	ignitionPubKey  string
+
+	// vsock support
+	vsockCID uint32
 }
 
 // NewQemuBuilder creates a new build for QEMU with default settings.
@@ -667,6 +683,12 @@ func virtio(arch, device, args string) string {
 		panic(fmt.Sprintf("RpmArch %s unhandled in virtio()", arch))
 	}
 	return fmt.Sprintf("virtio-%s-%s,%s", device, suffix, args)
+}
+
+// EnableVsock configures a vhost-vsock-pci device for the VM with the given CID.
+// QEMU will open /dev/vhost-vsock itself and reserve the CID.
+func (builder *QemuBuilder) EnableVsock(cid uint32) {
+	builder.vsockCID = cid
 }
 
 // EnableUsermodeNetworking configure forwarding for all requested ports,
@@ -1870,6 +1892,14 @@ func (builder *QemuBuilder) Exec() (*QemuInstance, error) {
 		"-device", virtio(builder.architecture, "rng", "rng=rng0"))
 	if builder.UUID != "" {
 		argv = append(argv, "-uuid", builder.UUID)
+	}
+
+	// Set up vsock device if enabled. QEMU will open /dev/vhost-vsock
+	// and reserve the CID itself.
+	if builder.vsockCID > 0 {
+		argv = append(argv, "-device",
+			fmt.Sprintf("vhost-vsock-pci,guest-cid=%d", builder.vsockCID))
+		inst.vsockCID = builder.vsockCID
 	}
 
 	// We never want a popup window
