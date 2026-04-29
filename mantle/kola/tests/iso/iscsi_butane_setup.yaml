@@ -180,3 +180,7 @@ systemd:
         ExecStart=/usr/local/bin/install-coreos-iscsi
         [Install]
         WantedBy=multi-user.target
+    # Mask until bootupd fix lands
+    # https://github.com/coreos/fedora-coreos-tracker/issues/2136
+    - name: bootloader-update.service
+      mask: true
