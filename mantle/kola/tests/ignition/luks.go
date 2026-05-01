@@ -57,7 +57,6 @@ func init() {
 		ClusterSize:          0,
 		Name:                 `luks.sss.t2.fips`,
 		Description:          "Verify that the rootfs is encrypted with SSS with t=2 and FIPS mode enabled.",
-		CreationDate:         "2026-05-01",
 		Flags:                []register.Flag{},
 		Distros:              []string{"rhcos"},
 		Platforms:            []string{"qemu"},
