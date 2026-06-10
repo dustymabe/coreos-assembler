@@ -180,7 +180,13 @@ systemd:
         ExecStart=/usr/local/bin/install-coreos-iscsi
         [Install]
         WantedBy=multi-user.target
-    # Mask until bootupd fix lands
-    # https://github.com/coreos/fedora-coreos-tracker/issues/2136
+    # Disable bootloader-update.service because it runs on live systems
+    # https://github.com/coreos/fedora-coreos-tracker/issues/2136 was
+    # fixed in bootupd 0.2.34 in 9.7+ and 10.3+. Disable on 9.8 and 10.2 for now.
     - name: bootloader-update.service
-      mask: true
+      dropins:
+        - name: 00-skip-versions.conf
+          contents: |
+            [Unit]
+            ConditionOSRelease=!VERSION_ID=9.8
+            ConditionOSRelease=!VERSION_ID=10.2
