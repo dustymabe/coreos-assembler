@@ -43,15 +43,10 @@ type AssociateClientVpnTargetNetworkInput struct {
 	// This member is required.
 	ClientVpnEndpointId *string
 
-	// The Availability Zone name for the Transit Gateway association. Required if
-	// when associating an Availability Zone with a Client VPN endpoint that uses a
-	// Transit Gateway. You cannot specify both SubnetId and AvailabilityZone .
-	AvailabilityZone *string
-
-	// The Availability Zone ID for the Transit Gateway association. Required if when
-	// associating an Availability Zone with a Client VPN endpoint that uses a Transit
-	// Gateway. You cannot specify both AvailabilityZone and AvailabilityZoneId .
-	AvailabilityZoneId *string
+	// The ID of the subnet to associate with the Client VPN endpoint.
+	//
+	// This member is required.
+	SubnetId *string
 
 	// Unique, case-sensitive identifier that you provide to ensure the idempotency of
 	// the request. For more information, see [Ensuring idempotency].
@@ -64,11 +59,6 @@ type AssociateClientVpnTargetNetworkInput struct {
 	// required permissions, the error response is DryRunOperation . Otherwise, it is
 	// UnauthorizedOperation .
 	DryRun *bool
-
-	// The ID of the subnet to associate with the Client VPN endpoint. Required for
-	// VPC-based endpoints. For Transit Gateway-based endpoints, use AvailabilityZone
-	// or AvailabilityZoneId instead.
-	SubnetId *string
 
 	noSmithyDocumentSerde
 }
