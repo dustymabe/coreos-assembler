@@ -996,6 +996,7 @@ type externalTestMeta struct {
 	Description               string   `json:"description"                         yaml:"description"`
 	BindMountHostRO           []string `json:"bindMountHostRO,omitempty"           yaml:"bindMountHostRO,omitempty"`
 	CreationDate              string   `json:"creationDate,omitempty"              yaml:"creationDate,omitempty"`
+	BootFromIso               bool     `json:"bootFromIso,omitempty"               yaml:"bootFromIso,omitempty"`
 }
 
 // metadataFromTestBinary extracts JSON-in-comment like:
@@ -1230,6 +1231,7 @@ ExecStart=%s
 			AppendKernelArgs:          targetMeta.AppendKernelArgs,
 			AppendFirstbootKernelArgs: targetMeta.AppendFirstbootKernelArgs,
 			InstanceType:              targetMeta.InstanceType,
+			BootFromIso:               targetMeta.BootFromIso,
 		},
 		InjectContainer: targetMeta.InjectContainer,
 		NonExclusive:    !targetMeta.Exclusive,
@@ -1845,6 +1847,17 @@ func runTest(h *harness.H, t *register.Test, pltfrm string, flight platform.Flig
 
 		if testSecureBoot(t) {
 			options.Firmware = "uefi-secure"
+		}
+
+		// Skip tests that request ISO boot when no live ISO artifact is available,
+		// consistent with how internal ISO tests use EnsureLiveArtifactsExist().
+		if options.BootFromIso && (CosaBuild == nil || CosaBuild.Meta.BuildArtifacts.LiveIso == nil) {
+			buildID := "unknown"
+			if CosaBuild != nil {
+				buildID = CosaBuild.Meta.BuildID
+			}
+			h.Skipf("bootFromIso requested but build %s has no live ISO artifact", buildID)
+			return
 		}
 
 		// Providers sometimes fail to bring up a machine within a

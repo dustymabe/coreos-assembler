@@ -181,6 +181,7 @@ type MachineOptions struct {
 	Nvme                      bool
 	Cex                       bool
 	BindMountHostRO           []string
+	BootFromIso               bool
 }
 
 // EnsureNoQEMUOnlyOptions returns an error if any QEMU-only options
@@ -228,6 +229,9 @@ func (m *MachineOptions) EnsureNoQEMUOnlyOptions(platformName string) error {
 	}
 	if len(m.BindMountHostRO) > 0 {
 		return fmt.Errorf("platform %s does not support bind mounting host paths", platformName)
+	}
+	if m.BootFromIso {
+		return fmt.Errorf("platform %s does not support booting from ISO", platformName)
 	}
 	return nil
 }

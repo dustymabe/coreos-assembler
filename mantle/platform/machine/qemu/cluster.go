@@ -327,37 +327,46 @@ func (qc *Cluster) InitDefaultBuilder(options platform.MachineOptions, builder *
 }
 
 func (qc *Cluster) SetupDefaultDisks(options platform.MachineOptions, builder *platform.QemuBuilder) error {
-	var primaryDisk platform.Disk
-	if options.PrimaryDisk != "" {
-		diskp, err := platform.ParseDisk(options.PrimaryDisk, true)
-		if err != nil {
-			return errors.Wrapf(err, "parsing primary disk spec '%s'", options.PrimaryDisk)
+	if options.BootFromIso {
+		if qc.flight.opts.IsoImage == "" {
+			return fmt.Errorf("bootFromIso requested but no ISO image path is available; does the build have a live ISO artifact?")
 		}
-		primaryDisk = *diskp
-	}
-	if qc.flight.opts.Nvme || options.Nvme {
-		primaryDisk.Channel = "nvme"
-	}
-	if qc.flight.opts.Native4k {
-		primaryDisk.SectorSize = 4096
-	} else if qc.flight.opts.Disk512e {
-		primaryDisk.SectorSize = 4096
-		primaryDisk.LogicalSectorSize = 512
-	}
-	if options.MultiPathDisk || qc.flight.opts.MultiPathDisk {
-		primaryDisk.MultiPathDisk = true
-	}
-	if options.MinDiskSize > 0 {
-		primaryDisk.Size = fmt.Sprintf("%dG", options.MinDiskSize)
-	} else if qc.flight.opts.DiskSize != "" {
-		primaryDisk.Size = qc.flight.opts.DiskSize
-	}
-	primaryDisk.BackingFile = qc.flight.opts.DiskImage
-	if options.OverrideBackingFile != "" {
-		primaryDisk.BackingFile = options.OverrideBackingFile
-	}
-	if err := builder.AddBootDisk(&primaryDisk); err != nil {
-		return err
+		if err := builder.AddIso(qc.flight.opts.IsoImage, "", false); err != nil {
+			return err
+		}
+	} else {
+		var primaryDisk platform.Disk
+		if options.PrimaryDisk != "" {
+			diskp, err := platform.ParseDisk(options.PrimaryDisk, true)
+			if err != nil {
+				return errors.Wrapf(err, "parsing primary disk spec '%s'", options.PrimaryDisk)
+			}
+			primaryDisk = *diskp
+		}
+		if qc.flight.opts.Nvme || options.Nvme {
+			primaryDisk.Channel = "nvme"
+		}
+		if qc.flight.opts.Native4k {
+			primaryDisk.SectorSize = 4096
+		} else if qc.flight.opts.Disk512e {
+			primaryDisk.SectorSize = 4096
+			primaryDisk.LogicalSectorSize = 512
+		}
+		if options.MultiPathDisk || qc.flight.opts.MultiPathDisk {
+			primaryDisk.MultiPathDisk = true
+		}
+		if options.MinDiskSize > 0 {
+			primaryDisk.Size = fmt.Sprintf("%dG", options.MinDiskSize)
+		} else if qc.flight.opts.DiskSize != "" {
+			primaryDisk.Size = qc.flight.opts.DiskSize
+		}
+		primaryDisk.BackingFile = qc.flight.opts.DiskImage
+		if options.OverrideBackingFile != "" {
+			primaryDisk.BackingFile = options.OverrideBackingFile
+		}
+		if err := builder.AddBootDisk(&primaryDisk); err != nil {
+			return err
+		}
 	}
 	if err := builder.AddDisksFromSpecs(options.AdditionalDisks); err != nil {
 		return err
