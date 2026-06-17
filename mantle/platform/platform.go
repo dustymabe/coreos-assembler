@@ -182,6 +182,7 @@ type MachineOptions struct {
 	Cex                       bool
 	BindMountHostRO           []string
 	BootFromIso               bool
+	NoIgnition                bool
 }
 
 // EnsureNoQEMUOnlyOptions returns an error if any QEMU-only options
@@ -232,6 +233,9 @@ func (m *MachineOptions) EnsureNoQEMUOnlyOptions(platformName string) error {
 	}
 	if m.BootFromIso {
 		return fmt.Errorf("platform %s does not support booting from ISO", platformName)
+	}
+	if m.NoIgnition {
+		return fmt.Errorf("platform %s does not support NoIgnition", platformName)
 	}
 	return nil
 }
