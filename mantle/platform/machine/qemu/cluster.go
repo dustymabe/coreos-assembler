@@ -15,10 +15,12 @@
 package qemu
 
 import (
+	"encoding/base64"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -152,6 +154,53 @@ func (qc *Cluster) NewMachineWithBuilder(userdata any, options platform.MachineO
 			config.AddSystemdUnit("sshd-vsock@.service", sshdVsockServiceUnit, conf.NoState)
 			plog.Infof("Injected vsock SSH systemd units into guest Ignition config")
 		}
+	}
+
+	// When NoIgnition is set, provision SSH keys via virtiofs systemd
+	// credentials. This creates a temporary directory with a tmpfiles.extra
+	// systemd credential file that sets up ~/.ssh/authorized_keys for the
+	// SSH user, and shares it with the guest via virtiofs using the tag
+	// "io.systemd.credentials". The guest must have
+	// import-virtiofs-systemd-credentials.service installed to import
+	// these systemd credentials at boot.
+	//
+	// This approach works on all architectures (x86_64, aarch64, ppc64le,
+	// s390x) unlike SMBIOS OEM strings or fw_cfg which are limited to
+	// specific architectures.
+	if options.NoIgnition {
+		systemdCredDir, err := os.MkdirTemp("", "mantle-systemd-credentials-*")
+		if err != nil {
+			return nil, fmt.Errorf("creating systemd credential dir: %v", err)
+		}
+		keys, err := qc.Keys()
+		if err != nil {
+			return nil, fmt.Errorf("getting SSH keys: %v", err)
+		}
+		if len(keys) > 0 {
+			sshUser := "core"
+			homeDir := "/var/home/" + sshUser
+			sshDirMode := "0700"
+
+			var keyLines []string
+			for _, key := range keys {
+				keyLines = append(keyLines, key.String())
+			}
+			keysB64 := base64.StdEncoding.EncodeToString(
+				[]byte(strings.Join(keyLines, "\n") + "\n"))
+
+			// Build a tmpfiles.d config that creates ~/.ssh and
+			// writes authorized_keys. See tmpfiles.d(5).
+			tmpfiles := fmt.Sprintf(
+				"d %s/.ssh %s %s %s -\nf~ %s/.ssh/authorized_keys 0600 %s %s - %s",
+				homeDir, sshDirMode, sshUser, sshUser,
+				homeDir, sshUser, sshUser, keysB64)
+
+			credPath := filepath.Join(systemdCredDir, "tmpfiles.extra")
+			if err := os.WriteFile(credPath, []byte(tmpfiles), 0600); err != nil {
+				return nil, fmt.Errorf("writing tmpfiles.extra systemd credential: %v", err)
+			}
+		}
+		qemuBuilder.MountSystemdCredentialDir(systemdCredDir)
 	}
 
 	// Since we are on qemu let's just use non-network based journal

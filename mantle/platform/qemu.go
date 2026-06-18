@@ -564,6 +564,13 @@ type QemuBuilder struct {
 	virtioSerialID uint
 	// hostMounts is an array of directories mounted (via 9p or virtiofs) from the host
 	hostMounts []HostMount
+	// systemdCredentialDir is a host directory containing systemd credential
+	// files to share with the guest via virtiofs using the tag
+	// "io.systemd.credentials". The guest must have
+	// import-virtiofs-systemd-credentials.service (or equivalent) to mount
+	// the share and import credentials into /run/credentials/@system/.
+	// See https://systemd.io/CREDENTIALS/ and https://github.com/systemd/systemd/issues/29175
+	systemdCredentialDir string
 	// fds is file descriptors we own to pass to qemu
 	fds []*os.File
 
@@ -874,6 +881,20 @@ func (builder *QemuBuilder) encryptIgnitionConfig() error {
 // We do mount it read-only by default in the guest, however.
 func (builder *QemuBuilder) MountHost(source, dest string, readonly bool) {
 	builder.hostMounts = append(builder.hostMounts, HostMount{src: source, dest: dest, readonly: readonly})
+}
+
+// MountSystemdCredentialDir shares a host directory with the guest via virtiofs
+// using the well-known tag "io.systemd.credentials". The guest must run
+// import-virtiofs-systemd-credentials.service (or equivalent) to mount this
+// share and copy systemd credential files into /run/credentials/@system/.
+//
+// This provides a cross-architecture alternative to SMBIOS OEM strings
+// and fw_cfg for passing systemd credentials to VMs. Unlike those mechanisms,
+// virtiofs works on all architectures (x86_64, aarch64, ppc64le, s390x).
+//
+// See https://systemd.io/CREDENTIALS/ for the systemd credentials specification.
+func (builder *QemuBuilder) MountSystemdCredentialDir(dir string) {
+	builder.systemdCredentialDir = dir
 }
 
 // supportsFwCfg if the target system supports injecting
@@ -2032,8 +2053,19 @@ func (builder *QemuBuilder) Exec() (*QemuInstance, error) {
 		return nil, err
 	}
 
+	// Build the list of virtiofs mounts: regular host mounts plus systemd credential dir
+	allVirtioFSMounts := make([]HostMount, len(builder.hostMounts))
+	copy(allVirtioFSMounts, builder.hostMounts)
+	if builder.systemdCredentialDir != "" {
+		allVirtioFSMounts = append(allVirtioFSMounts, HostMount{
+			src:      builder.systemdCredentialDir,
+			dest:     "io.systemd.credentials",
+			readonly: true,
+		})
+	}
+
 	// Process virtiofs mounts
-	if len(builder.hostMounts) > 0 {
+	if len(allVirtioFSMounts) > 0 {
 		if err := builder.ensureTempdir(); err != nil {
 			return nil, err
 		}
@@ -2042,7 +2074,7 @@ func (builder *QemuBuilder) Exec() (*QemuInstance, error) {
 
 		// Spawn off a virtiofsd helper per mounted path
 		virtiofsHelpers := make(map[string]exec.Cmd)
-		for i, hostmnt := range builder.hostMounts {
+		for i, hostmnt := range allVirtioFSMounts {
 			// By far the most common failure to spawn virtiofsd will be a typo'd source directory,
 			// so let's synchronously check that ourselves here.
 			if _, err := os.Stat(hostmnt.src); err != nil {
@@ -2052,7 +2084,7 @@ func (builder *QemuBuilder) Exec() (*QemuInstance, error) {
 			virtiofsdSocket := filepath.Join(builder.tempdir, fmt.Sprintf("virtiofsd-%d.sock", i))
 			builder.Append("-chardev", fmt.Sprintf("socket,id=%s,path=%s", virtiofsChar, virtiofsdSocket))
 			builder.Append("-device", fmt.Sprintf("vhost-user-fs-pci,queue-size=1024,chardev=%s,tag=%s", virtiofsChar, hostmnt.dest))
-			plog.Debugf("creating virtiofs helper for %s", hostmnt.src)
+			plog.Debugf("creating virtiofs helper for %s (tag=%s)", hostmnt.src, hostmnt.dest)
 			// TODO: Honor hostmnt.readonly somehow here (add an option to virtiofsd)
 			p := createVirtiofsCmd(hostmnt.src, virtiofsdSocket)
 			if err := p.Start(); err != nil {
